@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ic_launcher_background">#1A73E8</color>
+
+    <!-- Alphabet rail drawn over the (dark) app drawer scrim. -->
+    <color name="index_bar_letter">#80FFFFFF</color>
+    <color name="index_bar_letter_active">#FFFFFFFF</color>
+
+    <!-- Numbers and delete crosses on the page chips, drawn on the dark chip. -->
+    <color name="page_chip_text">#FFFFFFFF</color>
+</resources>

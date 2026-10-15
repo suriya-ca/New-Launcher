@@ -1,0 +1,221 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/settings_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?android:attr/colorBackground"
+    android:orientation="vertical">
+
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="?attr/actionBarSize"
+        app:navigationIcon="@drawable/ic_arrow_back"
+        app:title="@string/settings_section_drawer" />
+
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:clipToPadding="false"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingStart="16dp"
+            android:paddingTop="8dp"
+            android:paddingEnd="16dp"
+            android:paddingBottom="24dp">
+
+            <!-- ===================== LAYOUT MODE ===================== -->
+            <LinearLayout style="@style/SettingsCard">
+
+                <LinearLayout style="@style/SettingsRow">
+
+                    <ImageView
+                        style="@style/SettingsRowIcon"
+                        android:src="@drawable/ic_grid" />
+
+                    <LinearLayout style="@style/SettingsRowText">
+
+                        <TextView
+                            style="@style/SettingsRowTitleInline"
+                            android:text="@string/settings_drawer_layout" />
+
+                        <TextView
+                            style="@style/SettingsRowSummary"
+                            android:text="@string/settings_drawer_layout_summary" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <RadioGroup
+                    android:id="@+id/drawer_layout_group"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+
+                    <com.google.android.material.radiobutton.MaterialRadioButton
+                        android:id="@+id/mode_grid"
+                        style="@style/SettingsModeRadio"
+                        android:text="@string/settings_layout_grid" />
+
+                    <com.google.android.material.radiobutton.MaterialRadioButton
+                        android:id="@+id/mode_pages"
+                        style="@style/SettingsModeRadio"
+                        android:text="@string/settings_layout_pages" />
+
+                    <com.google.android.material.radiobutton.MaterialRadioButton
+                        android:id="@+id/mode_list"
+                        style="@style/SettingsModeRadio"
+                        android:text="@string/settings_layout_list" />
+
+                    <com.google.android.material.radiobutton.MaterialRadioButton
+                        android:id="@+id/mode_az"
+                        style="@style/SettingsModeRadio"
+                        android:text="@string/settings_layout_az" />
+
+                    <com.google.android.material.radiobutton.MaterialRadioButton
+                        android:id="@+id/mode_custom"
+                        style="@style/SettingsModeRadio"
+                        android:text="@string/settings_layout_custom" />
+                </RadioGroup>
+
+                <TextView
+                    android:id="@+id/drawer_layout_summary"
+                    style="@style/SettingsRowSummary"
+                    android:layout_marginTop="8dp"
+                    tools:text="Vertically scrolling grid" />
+            </LinearLayout>
+
+            <!-- ===================== GRID & LOOK ===================== -->
+            <LinearLayout style="@style/SettingsCard">
+
+                <LinearLayout style="@style/SettingsRow">
+
+                    <ImageView
+                        style="@style/SettingsRowIcon"
+                        android:src="@drawable/ic_grid" />
+
+                    <LinearLayout style="@style/SettingsRowText">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                style="@style/SettingsRowTitleWeighted"
+                                android:text="@string/settings_drawer_columns" />
+
+                            <TextView
+                                android:id="@+id/drawer_columns_value"
+                                style="@style/SettingsRowValueInline"
+                                tools:text="5 columns" />
+                        </LinearLayout>
+
+                        <TextView
+                            style="@style/SettingsRowSummary"
+                            android:text="@string/settings_drawer_columns_summary" />
+
+                        <com.google.android.material.slider.Slider
+                            android:id="@+id/drawer_columns_slider"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:stepSize="1"
+                            android:value="5"
+                            android:valueFrom="3"
+                            android:valueTo="7" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <View style="@style/SettingsDivider" />
+
+                <LinearLayout style="@style/SettingsRow">
+
+                    <ImageView
+                        style="@style/SettingsRowIcon"
+                        android:src="@drawable/ic_row_spacing" />
+
+                    <LinearLayout style="@style/SettingsRowText">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                style="@style/SettingsRowTitleWeighted"
+                                android:text="@string/settings_drawer_row_spacing" />
+
+                            <TextView
+                                android:id="@+id/drawer_row_spacing_value"
+                                style="@style/SettingsRowValueInline"
+                                tools:text="8 dp" />
+                        </LinearLayout>
+
+                        <TextView
+                            style="@style/SettingsRowSummary"
+                            android:text="@string/settings_drawer_row_spacing_summary" />
+
+                        <com.google.android.material.slider.Slider
+                            android:id="@+id/drawer_row_spacing_slider"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:stepSize="2"
+                            android:value="8"
+                            android:valueFrom="0"
+                            android:valueTo="24" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <View style="@style/SettingsDivider" />
+
+                <LinearLayout style="@style/SettingsRow">
+
+                    <ImageView
+                        style="@style/SettingsRowIcon"
+                        android:src="@drawable/ic_opacity" />
+
+                    <LinearLayout style="@style/SettingsRowText">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                style="@style/SettingsRowTitleWeighted"
+                                android:text="@string/settings_drawer_opacity" />
+
+                            <TextView
+                                android:id="@+id/drawer_opacity_value"
+                                style="@style/SettingsRowValueInline"
+                                tools:text="55%" />
+                        </LinearLayout>
+
+                        <TextView
+                            style="@style/SettingsRowSummary"
+                            android:text="@string/settings_drawer_opacity_summary" />
+
+                        <com.google.android.material.slider.Slider
+                            android:id="@+id/drawer_opacity_slider"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:stepSize="0.05"
+                            android:value="0.55"
+                            android:valueFrom="0.0"
+                            android:valueTo="1.0" />
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+</LinearLayout>

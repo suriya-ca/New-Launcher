@@ -1,0 +1,104 @@
+<resources>
+    <string name="app_name">New Launcher</string>
+    <string name="home_hint">Your home screen is empty.\nOpen the app drawer and touch &amp; hold an app to add it here.</string>
+    <string name="open_app_drawer">Open app drawer</string>
+    <string name="search_apps">Search apps</string>
+    <string name="no_apps_found">No apps found</string>
+    <string name="action_add_home">Add to Home</string>
+    <string name="action_remove_home">Remove from Home</string>
+    <string name="action_add_dock">Add to Dock</string>
+    <string name="action_remove_dock">Remove from Dock</string>
+    <string name="action_hide_app">Hide app</string>
+    <string name="action_app_info">App info</string>
+    <string name="action_uninstall">Uninstall</string>
+
+    <!-- Home edit mode -->
+    <string name="home_edit_wallpaper">Wallpaper</string>
+    <string name="home_edit_widgets">Widgets</string>
+    <string name="home_edit_settings">Home settings</string>
+    <string name="home_edit_add_page">Add page</string>
+    <string name="home_edit_done">Done</string>
+    <string name="home_remove">Remove</string>
+
+    <!-- Widgets -->
+    <string name="widgets_title">Add a widget</string>
+    <string name="widgets_for_app">%1$s widgets</string>
+    <string name="widgets_empty">No widgets are available on this device.</string>
+    <string name="widgets_no_match">No widgets match your search.</string>
+    <string name="widget_search_hint">Search widgets</string>
+    <string name="widget_size_value">%1$d × %2$d</string>
+    <string name="widget_missing">Widget unavailable</string>
+    <string name="action_widgets">Widgets</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Launcher Settings</string>
+    <string name="settings_section_home">Home screen</string>
+    <string name="settings_section_drawer">App drawer</string>
+    <string name="settings_section_icons">Icons &amp; labels</string>
+    <string name="settings_section_dock">Dock</string>
+    <string name="settings_section_privacy">Privacy</string>
+    <string name="settings_section_system">System</string>
+
+    <string name="settings_home_columns">Home grid columns</string>
+    <string name="settings_home_columns_summary">Apps per row on the home screen</string>
+    <string name="settings_home_rows">Home grid rows</string>
+    <string name="settings_home_rows_summary">Apps per column on the home screen</string>
+    <string name="settings_drawer_columns">Drawer grid columns</string>
+    <string name="settings_drawer_columns_summary">Apps per row in the drawer</string>
+    <string name="settings_drawer_hub_summary">%1$s \u00b7 %2$d columns</string>
+    <string name="settings_drawer_opacity">Background opacity</string>
+    <string name="settings_drawer_opacity_summary">How strongly the drawer dims the wallpaper</string>
+    <string name="settings_icon_size">Icon size</string>
+    <string name="settings_icon_size_summary">Applies to home, dock and drawer icons</string>
+    <string name="settings_show_labels">Show app labels</string>
+    <string name="settings_show_labels_summary">Draw the app name under each icon</string>
+    <string name="settings_show_dock">Show dock</string>
+    <string name="settings_show_dock_summary">Pin apps along the bottom of the home screen</string>
+    <string name="settings_show_apps_button">Show app drawer button</string>
+    <string name="settings_show_apps_button_summary">The grid button at the end of the dock</string>
+    <string name="settings_dock_capacity">Dock capacity</string>
+    <string name="settings_dock_capacity_summary">Maximum number of dock icons</string>
+
+    <string name="settings_drawer_layout">Drawer layout</string>
+    <string name="settings_drawer_layout_summary">Choose how apps are arranged in the drawer</string>
+    <string name="settings_layout_grid">Grid</string>
+    <string name="settings_layout_grid_summary">Vertically scrolling grid</string>
+    <string name="settings_layout_pages">Pages</string>
+    <string name="settings_layout_pages_summary">Swipe horizontally between full pages</string>
+    <string name="settings_layout_list">List</string>
+    <string name="settings_layout_list_summary">One app per row with its name</string>
+    <string name="settings_layout_az">A&#8211;Z sections</string>
+    <string name="settings_layout_az_summary">Grouped by letter with a sticky header</string>
+    <string name="settings_layout_custom">Custom order</string>
+    <string name="settings_drawer_row_spacing">Row spacing</string>
+    <string name="settings_drawer_row_spacing_summary">Extra space between drawer rows</string>
+    <string name="settings_custom_order_summary">Long-press and drag an icon to reorder</string>
+
+    <string name="settings_hide_apps">Hide apps</string>
+    <string name="settings_hidden_apps">Hidden apps</string>
+    <string name="settings_hidden_apps_summary">%1$d apps hidden</string>
+    <string name="hidden_apps_empty">No apps found</string>
+
+    <string name="settings_default_launcher">Set as default launcher</string>
+    <string name="settings_default_launcher_summary">Open the system Home settings</string>
+    <string name="settings_version">Version</string>
+    <string name="settings_version_value">%1$s</string>
+    <string name="settings_reset">Reset to defaults</string>
+    <string name="settings_reset_summary">Restore every launcher setting</string>
+    <string name="settings_reset_confirm">This restores all launcher settings and clears the home screen and dock. Continue?</string>
+
+    <string name="settings_columns_value">%1$d columns</string>
+    <string name="settings_rows_value">%1$d rows</string>
+    <string name="settings_grid_value">%1$d \u00d7 %2$d</string>
+    <string name="settings_percent_value">%1$d%%</string>
+    <string name="settings_dp_value">%1$d dp</string>
+    <string name="settings_icons_value">%1$d icons</string>
+
+    <string name="home_page_delete">Delete page</string>
+    <string name="home_page_delete_title">Delete page %1$d?</string>
+    <string name="home_page_delete_confirm">Delete</string>
+    <plurals name="home_page_delete_message">
+        <item quantity="one">The %1$d item on it goes with it.</item>
+        <item quantity="other">All %1$d items on it go with it.</item>
+    </plurals>
+</resources>

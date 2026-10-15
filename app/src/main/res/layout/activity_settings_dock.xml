@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/settings_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?android:attr/colorBackground"
+    android:orientation="vertical">
+
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="?attr/actionBarSize"
+        app:navigationIcon="@drawable/ic_arrow_back"
+        app:title="@string/settings_section_dock" />
+
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:clipToPadding="false"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingStart="16dp"
+            android:paddingTop="8dp"
+            android:paddingEnd="16dp"
+            android:paddingBottom="24dp">
+
+            <LinearLayout style="@style/SettingsCard">
+
+                <LinearLayout style="@style/SettingsRow">
+
+                    <ImageView
+                        style="@style/SettingsRowIcon"
+                        android:src="@drawable/ic_dock" />
+
+                    <LinearLayout style="@style/SettingsRowText">
+
+                        <TextView
+                            style="@style/SettingsRowTitleInline"
+                            android:text="@string/settings_show_dock" />
+
+                        <TextView
+                            style="@style/SettingsRowSummary"
+                            android:text="@string/settings_show_dock_summary" />
+                    </LinearLayout>
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/show_dock_switch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                </LinearLayout>
+
+                <View style="@style/SettingsDivider" />
+
+                <LinearLayout style="@style/SettingsRow">
+
+                    <ImageView
+                        style="@style/SettingsRowIcon"
+                        android:src="@drawable/ic_apps_theme" />
+
+                    <LinearLayout style="@style/SettingsRowText">
+
+                        <TextView
+                            style="@style/SettingsRowTitleInline"
+                            android:text="@string/settings_show_apps_button" />
+
+                        <TextView
+                            style="@style/SettingsRowSummary"
+                            android:text="@string/settings_show_apps_button_summary" />
+                    </LinearLayout>
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/show_apps_button_switch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                </LinearLayout>
+
+                <View style="@style/SettingsDivider" />
+
+                <LinearLayout style="@style/SettingsRow">
+
+                    <ImageView
+                        style="@style/SettingsRowIcon"
+                        android:src="@drawable/ic_grid" />
+
+                    <LinearLayout style="@style/SettingsRowText">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                style="@style/SettingsRowTitleWeighted"
+                                android:text="@string/settings_dock_capacity" />
+
+                            <TextView
+                                android:id="@+id/dock_capacity_value"
+                                style="@style/SettingsRowValueInline"
+                                tools:text="6 icons" />
+                        </LinearLayout>
+
+                        <TextView
+                            style="@style/SettingsRowSummary"
+                            android:text="@string/settings_dock_capacity_summary" />
+
+                        <com.google.android.material.slider.Slider
+                            android:id="@+id/dock_capacity_slider"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:stepSize="1"
+                            android:value="6"
+                            android:valueFrom="1"
+                            android:valueTo="8" />
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+</LinearLayout>

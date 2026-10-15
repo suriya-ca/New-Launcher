@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/settings_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?android:attr/colorBackground"
+    android:orientation="vertical">
+
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="?attr/actionBarSize"
+        app:navigationIcon="@drawable/ic_arrow_back"
+        app:title="@string/settings_section_home" />
+
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:clipToPadding="false"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingStart="16dp"
+            android:paddingTop="8dp"
+            android:paddingEnd="16dp"
+            android:paddingBottom="24dp">
+
+            <LinearLayout style="@style/SettingsCard">
+
+                <LinearLayout style="@style/SettingsRow">
+
+                    <ImageView
+                        style="@style/SettingsRowIcon"
+                        android:src="@drawable/ic_home" />
+
+                    <LinearLayout style="@style/SettingsRowText">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                style="@style/SettingsRowTitleWeighted"
+                                android:text="@string/settings_home_columns" />
+
+                            <TextView
+                                android:id="@+id/home_columns_value"
+                                style="@style/SettingsRowValueInline"
+                                tools:text="4 columns" />
+                        </LinearLayout>
+
+                        <TextView
+                            style="@style/SettingsRowSummary"
+                            android:text="@string/settings_home_columns_summary" />
+
+                        <com.google.android.material.slider.Slider
+                            android:id="@+id/home_columns_slider"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:stepSize="1"
+                            android:value="4"
+                            android:valueFrom="3"
+                            android:valueTo="6" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <View style="@style/SettingsDivider" />
+
+                <LinearLayout style="@style/SettingsRow">
+
+                    <ImageView
+                        style="@style/SettingsRowIcon"
+                        android:src="@drawable/ic_grid" />
+
+                    <LinearLayout style="@style/SettingsRowText">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                style="@style/SettingsRowTitleWeighted"
+                                android:text="@string/settings_home_rows" />
+
+                            <TextView
+                                android:id="@+id/home_rows_value"
+                                style="@style/SettingsRowValueInline"
+                                tools:text="5 rows" />
+                        </LinearLayout>
+
+                        <TextView
+                            style="@style/SettingsRowSummary"
+                            android:text="@string/settings_home_rows_summary" />
+
+                        <com.google.android.material.slider.Slider
+                            android:id="@+id/home_rows_slider"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:stepSize="1"
+                            android:value="5"
+                            android:valueFrom="3"
+                            android:valueTo="8" />
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+</LinearLayout>

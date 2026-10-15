@@ -1,0 +1,228 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/settings_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?android:attr/colorBackground"
+    android:orientation="vertical">
+
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="?attr/actionBarSize"
+        app:navigationIcon="@drawable/ic_arrow_back"
+        app:title="@string/settings_title" />
+
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:clipToPadding="false"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingStart="16dp"
+            android:paddingTop="8dp"
+            android:paddingEnd="16dp"
+            android:paddingBottom="24dp">
+
+            <!-- ===================== HOME SCREEN ===================== -->
+            <LinearLayout
+                android:id="@+id/row_home"
+                style="@style/SettingsCard"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground">
+
+                <LinearLayout style="@style/SettingsRow">
+
+                    <ImageView
+                        style="@style/SettingsRowIcon"
+                        android:src="@drawable/ic_home" />
+
+                    <LinearLayout style="@style/SettingsRowText">
+
+                        <TextView
+                            style="@style/SettingsRowTitleInline"
+                            android:text="@string/settings_section_home" />
+
+                        <TextView
+                            android:id="@+id/home_summary"
+                            style="@style/SettingsRowSummary"
+                            tools:text="4 columns" />
+                    </LinearLayout>
+
+                    <ImageView
+                        style="@style/SettingsRowChevron"
+                        android:src="@drawable/ic_chevron_right" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- ===================== APP DRAWER ===================== -->
+            <LinearLayout
+                android:id="@+id/row_drawer"
+                style="@style/SettingsCard"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground">
+
+                <LinearLayout style="@style/SettingsRow">
+
+                    <ImageView
+                        style="@style/SettingsRowIcon"
+                        android:src="@drawable/ic_grid" />
+
+                    <LinearLayout style="@style/SettingsRowText">
+
+                        <TextView
+                            style="@style/SettingsRowTitleInline"
+                            android:text="@string/settings_section_drawer" />
+
+                        <TextView
+                            android:id="@+id/drawer_summary"
+                            style="@style/SettingsRowSummary"
+                            tools:text="Grid - 5 columns" />
+                    </LinearLayout>
+
+                    <ImageView
+                        style="@style/SettingsRowChevron"
+                        android:src="@drawable/ic_chevron_right" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- ===================== ICONS & LABELS ===================== -->
+            <LinearLayout
+                android:id="@+id/row_icons"
+                style="@style/SettingsCard"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground">
+
+                <LinearLayout style="@style/SettingsRow">
+
+                    <ImageView
+                        style="@style/SettingsRowIcon"
+                        android:src="@drawable/ic_icon_size" />
+
+                    <LinearLayout style="@style/SettingsRowText">
+
+                        <TextView
+                            style="@style/SettingsRowTitleInline"
+                            android:text="@string/settings_section_icons" />
+
+                        <TextView
+                            android:id="@+id/icons_summary"
+                            style="@style/SettingsRowSummary"
+                            tools:text="52 dp" />
+                    </LinearLayout>
+
+                    <ImageView
+                        style="@style/SettingsRowChevron"
+                        android:src="@drawable/ic_chevron_right" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- ===================== DOCK ===================== -->
+            <LinearLayout
+                android:id="@+id/row_dock"
+                style="@style/SettingsCard"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground">
+
+                <LinearLayout style="@style/SettingsRow">
+
+                    <ImageView
+                        style="@style/SettingsRowIcon"
+                        android:src="@drawable/ic_dock" />
+
+                    <LinearLayout style="@style/SettingsRowText">
+
+                        <TextView
+                            style="@style/SettingsRowTitleInline"
+                            android:text="@string/settings_section_dock" />
+
+                        <TextView
+                            android:id="@+id/dock_summary"
+                            style="@style/SettingsRowSummary"
+                            tools:text="6 icons" />
+                    </LinearLayout>
+
+                    <ImageView
+                        style="@style/SettingsRowChevron"
+                        android:src="@drawable/ic_chevron_right" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- ===================== HIDDEN APPS ===================== -->
+            <LinearLayout
+                android:id="@+id/row_hidden"
+                style="@style/SettingsCard"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground">
+
+                <LinearLayout style="@style/SettingsRow">
+
+                    <ImageView
+                        style="@style/SettingsRowIcon"
+                        android:src="@drawable/ic_privacy" />
+
+                    <LinearLayout style="@style/SettingsRowText">
+
+                        <TextView
+                            style="@style/SettingsRowTitleInline"
+                            android:text="@string/settings_hidden_apps" />
+
+                        <TextView
+                            android:id="@+id/hidden_summary"
+                            style="@style/SettingsRowSummary"
+                            tools:text="0 apps hidden" />
+                    </LinearLayout>
+
+                    <ImageView
+                        style="@style/SettingsRowChevron"
+                        android:src="@drawable/ic_chevron_right" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- ===================== SYSTEM ===================== -->
+            <LinearLayout
+                android:id="@+id/row_system"
+                style="@style/SettingsCard"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground">
+
+                <LinearLayout style="@style/SettingsRow">
+
+                    <ImageView
+                        style="@style/SettingsRowIcon"
+                        android:src="@drawable/ic_info" />
+
+                    <LinearLayout style="@style/SettingsRowText">
+
+                        <TextView
+                            style="@style/SettingsRowTitleInline"
+                            android:text="@string/settings_section_system" />
+
+                        <TextView
+                            android:id="@+id/system_summary"
+                            style="@style/SettingsRowSummary"
+                            tools:text="Version 1.0" />
+                    </LinearLayout>
+
+                    <ImageView
+                        style="@style/SettingsRowChevron"
+                        android:src="@drawable/ic_chevron_right" />
+                </LinearLayout>
+            </LinearLayout>
+
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+</LinearLayout>

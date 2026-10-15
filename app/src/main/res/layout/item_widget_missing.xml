@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Shown in place of a widget whose provider has gone away. -->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/bg_widget_missing"
+    android:gravity="center"
+    android:padding="8dp"
+    android:text="@string/widget_missing"
+    android:textColor="#E6FFFFFF"
+    android:textSize="12sp" />

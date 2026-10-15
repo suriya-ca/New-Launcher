@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/settings_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?android:attr/colorBackground"
+    android:orientation="vertical">
+
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="?attr/actionBarSize"
+        app:navigationIcon="@drawable/ic_arrow_back"
+        app:title="@string/settings_section_icons" />
+
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:clipToPadding="false"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingStart="16dp"
+            android:paddingTop="8dp"
+            android:paddingEnd="16dp"
+            android:paddingBottom="24dp">
+
+            <LinearLayout style="@style/SettingsCard">
+
+                <LinearLayout style="@style/SettingsRow">
+
+                    <ImageView
+                        style="@style/SettingsRowIcon"
+                        android:src="@drawable/ic_icon_size" />
+
+                    <LinearLayout style="@style/SettingsRowText">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                style="@style/SettingsRowTitleWeighted"
+                                android:text="@string/settings_icon_size" />
+
+                            <TextView
+                                android:id="@+id/icon_size_value"
+                                style="@style/SettingsRowValueInline"
+                                tools:text="52 dp" />
+                        </LinearLayout>
+
+                        <TextView
+                            style="@style/SettingsRowSummary"
+                            android:text="@string/settings_icon_size_summary" />
+
+                        <com.google.android.material.slider.Slider
+                            android:id="@+id/icon_size_slider"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:stepSize="4"
+                            android:value="52"
+                            android:valueFrom="40"
+                            android:valueTo="72" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <View style="@style/SettingsDivider" />
+
+                <LinearLayout style="@style/SettingsRow">
+
+                    <ImageView
+                        style="@style/SettingsRowIcon"
+                        android:src="@drawable/ic_label" />
+
+                    <LinearLayout style="@style/SettingsRowText">
+
+                        <TextView
+                            style="@style/SettingsRowTitleInline"
+                            android:text="@string/settings_show_labels" />
+
+                        <TextView
+                            style="@style/SettingsRowSummary"
+                            android:text="@string/settings_show_labels_summary" />
+                    </LinearLayout>
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/show_labels_switch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                </LinearLayout>
+            </LinearLayout>
+
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+</LinearLayout>

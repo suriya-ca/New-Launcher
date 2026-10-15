@@ -1,0 +1,25 @@
+<resources>
+    <!-- Base application theme. -->
+    <style name="Base.Theme.NewLauncher" parent="Theme.Material3.DayNight.NoActionBar">
+        <!-- Customize your light theme here. -->
+        <!-- <item name="colorPrimary">@color/my_light_primary</item> -->
+
+        <!-- Transparent window that shows the system wallpaper behind it. -->
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:colorBackground">@android:color/transparent</item>
+        <item name="android:windowShowWallpaper">true</item>
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowContentOverlay">@null</item>
+        <item name="android:windowSplashScreenBackground">@android:color/transparent</item>
+    </style>
+
+    <style name="Theme.NewLauncher" parent="Base.Theme.NewLauncher" />
+
+    <!--
+        Opaque theme used by the settings screens. It deliberately does NOT extend
+        Base.Theme.NewLauncher, because the launcher theme is translucent to show the
+        system wallpaper; settings should sit on a normal, solid background instead.
+    -->
+    <style name="Theme.NewLauncher.Settings" parent="Theme.Material3.DayNight.NoActionBar" />
+</resources>

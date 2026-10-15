@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Required on Android 11+ so the launcher can enumerate all installed apps. -->
+    <uses-permission
+        android:name="android.permission.QUERY_ALL_PACKAGES"
+        tools:ignore="QueryAllPackagesPermission" />
+
+    <application
+        android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:enableOnBackInvokedCallback="true"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.NewLauncher">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:launchMode="singleTask"
+            android:stateNotNeeded="true"
+            android:excludeFromRecents="true"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode|density"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.NewLauncher">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.HOME" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!--
+            The launcher's settings. It also advertises MAIN/LAUNCHER so it shows up as a
+            normal, tappable app inside the app drawer (and on other launchers).
+        -->
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="true"
+            android:icon="@drawable/ic_settings"
+            android:label="@string/settings_title"
+            android:theme="@style/Theme.NewLauncher.Settings">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".HomeSettingsActivity"
+            android:exported="false"
+            android:label="@string/settings_section_home"
+            android:parentActivityName=".SettingsActivity"
+            android:theme="@style/Theme.NewLauncher.Settings" />
+
+        <activity
+            android:name=".DrawerSettingsActivity"
+            android:exported="false"
+            android:label="@string/settings_section_drawer"
+            android:parentActivityName=".SettingsActivity"
+            android:theme="@style/Theme.NewLauncher.Settings" />
+
+        <activity
+            android:name=".IconsSettingsActivity"
+            android:exported="false"
+            android:label="@string/settings_section_icons"
+            android:parentActivityName=".SettingsActivity"
+            android:theme="@style/Theme.NewLauncher.Settings" />
+
+        <activity
+            android:name=".DockSettingsActivity"
+            android:exported="false"
+            android:label="@string/settings_section_dock"
+            android:parentActivityName=".SettingsActivity"
+            android:theme="@style/Theme.NewLauncher.Settings" />
+
+        <activity
+            android:name=".HiddenAppsActivity"
+            android:exported="false"
+            android:label="@string/settings_hidden_apps"
+            android:parentActivityName=".SettingsActivity"
+            android:theme="@style/Theme.NewLauncher.Settings" />
+
+        <activity
+            android:name=".SystemSettingsActivity"
+            android:exported="false"
+            android:label="@string/settings_section_system"
+            android:parentActivityName=".SettingsActivity"
+            android:theme="@style/Theme.NewLauncher.Settings" />
+    </application>
+
+</manifest>

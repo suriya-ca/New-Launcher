@@ -68,22 +68,29 @@ object WidgetRepository {
         spansFor(info.minWidth, info.minHeight, cellWidthDp, cellHeightDp, cellGapDp)
 
     /**
-     * The smallest placement a widget may be resized to. A provider's resize minimum is the size
-     * that provider supports when shrunk, so it wins when it declares one; otherwise the size it
-     * asks for when placed is the floor.
+     * The smallest placement a widget may be resized to, in cells.
+     *
+     * A provider that offers resizing names the smallest size it can be drawn at, and that is the
+     * floor. A provider that does not offer resizing has no such size: it only reports the size it
+     * would like to be placed at as its `minWidth`/`minHeight`, and using that as a floor would pin
+     * the widget at whatever size it already had — the handles could then never make it smaller.
+     * Such a widget goes down to a single cell, and the handles grow it back if it looks too small.
      */
     fun minimumResizeSpans(
         info: AppWidgetProviderInfo,
         cellWidthDp: Int,
         cellHeightDp: Int,
         cellGapDp: Int
-    ): Pair<Int, Int> = spansFor(
-        info.minResizeWidth.takeIf { it > 0 } ?: info.minWidth,
-        info.minResizeHeight.takeIf { it > 0 } ?: info.minHeight,
-        cellWidthDp,
-        cellHeightDp,
-        cellGapDp
-    )
+    ): Pair<Int, Int> {
+        val resizes = info.resizeMode != 0
+        return spansFor(
+            if (resizes) info.minResizeWidth else 0,
+            if (resizes) info.minResizeHeight else 0,
+            cellWidthDp,
+            cellHeightDp,
+            cellGapDp
+        )
+    }
 
     private fun spansFor(
         widthDp: Int,

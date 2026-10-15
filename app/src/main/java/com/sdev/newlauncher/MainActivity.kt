@@ -243,6 +243,12 @@ class MainActivity : AppCompatActivity() {
             refreshHomeAndDock()
             renderDrawer()
         }
+        // A sheet closed just before the system's bind/configure screen took over is finished here:
+        // its animation stopped with the window, and a visible sheet would eat touches on the home.
+        if (!widgetSheetOpen) hideWidgetSheet()
+        // And a sheet left stepped aside by a drag that never ended comes back: kept aside, it would
+        // look closed while still counting as open, leaving no way to open it again.
+        if (widgetSheetOpen && widgetDragItem == null) setWidgetSheetPeek(false)
     }
 
     // ---------------------------------------------------------------- setup
@@ -330,12 +336,16 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Always attached (but transparent) in edit mode, so it can accept the drop.
+        // Always attached (but transparent) in edit mode, so it can accept the drop. Only a drag of
+        // something already on the home has anything to remove: a widget lifted out of the picker
+        // or an app out of the drawer is not on the home yet, and accepting those would leave the
+        // target shadowing the top of the grid and swallowing the drop.
         binding.homeRemoveTarget.setOnDragListener { _, event ->
+            val state = event.localState as? Workspace.DragState
             when (event.action) {
+                DragEvent.ACTION_DRAG_STARTED -> state != null && !dragCarriesNewItem
                 DragEvent.ACTION_DROP -> {
-                    val state = event.localState as? Workspace.DragState
-                    if (state != null) removeHomeItem(state.item)
+                    if (state != null && !dragCarriesNewItem) removeHomeItem(state.item)
                     true
                 }
                 else -> true
@@ -461,9 +471,10 @@ class MainActivity : AppCompatActivity() {
         binding.editAddPage.setOnClickListener { addHomePage() }
         binding.editDone.setOnClickListener { exitEditMode() }
 
-        // The widget sheet is part of this window, so a widget can be dragged out of it.
+        // The widget sheet is part of this window, so a widget can be dragged out of it. Nothing
+        // here accepts a drag, though: a drop target left lying over the home would swallow every
+        // widget released behind it, so the grid is the only place a widget can land.
         binding.widgetSheetScrim.setOnClickListener { closeWidgetSheet() }
-        binding.widgetSheetPanel.setOnDragListener { view, event -> onWidgetSheetDrag(view, event) }
         binding.widgetSearch.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
@@ -709,9 +720,11 @@ class MainActivity : AppCompatActivity() {
 
     /** Applies a completed drag: exact placement, swap, or the nearest free cell. */
     private fun onHomeItemDropped(id: String, page: Int, row: Int, col: Int) {
-        // A widget lifted out of the picker is not on the home screen yet: it is being placed.
+        // A widget lifted out of the picker is not on the home screen yet: it is being placed. The
+        // grid reaches up under the sheet, so a long press released without pulling the card clear
+        // would otherwise drop the widget behind the sheet it was never lifted out of.
         if (widgetDragItem?.id == id) {
-            placePendingWidget(page, row, col)
+            if (widgetDragPulled) placePendingWidget(page, row, col)
             return
         }
 
@@ -836,6 +849,9 @@ class MainActivity : AppCompatActivity() {
     private fun showWidgetSheet() {
         val panel = binding.widgetSheetPanel
         val metrics = resources.displayMetrics
+        // A close still in flight ends by hiding the sheet, and cancelling that animation runs the
+        // end action too: take it off screen first so the rise that follows is not undone by it.
+        hideWidgetSheet()
         // Tall enough to browse, never so tall that it swallows the home screen behind it.
         binding.widgetList.layoutParams = binding.widgetList.layoutParams.apply {
             height = min(dp(WIDGET_LIST_MAX_DP), (metrics.heightPixels * 0.42f).toInt())
@@ -891,7 +907,11 @@ class MainActivity : AppCompatActivity() {
 
     /** Slides the sheet away and forgets what it was showing. */
     private fun closeWidgetSheet() {
-        if (!widgetSheetOpen) return
+        if (!widgetSheetOpen) {
+            // Nothing is open, so make sure nothing is left on screen either.
+            hideWidgetSheet()
+            return
+        }
         widgetSheetOpen = false
         widgetSheetPeeking = false
         widgetSheetFilter = null
@@ -905,7 +925,7 @@ class MainActivity : AppCompatActivity() {
             .setDuration(SHEET_ANIM_MS)
             .setInterpolator(DecelerateInterpolator())
             .withEndAction {
-                binding.widgetSheet.visibility = View.GONE
+                hideWidgetSheet()
                 panel.translationY = 0f
             }
             .start()
@@ -913,8 +933,23 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Moves the sheet out of the way of a widget being carried to the home screen, and back again.
-     * Only the panel travels: staying laid out means a drag that comes back over it still finds it.
+     * Takes the sheet off screen at once, translations and all. Sheet animations stop while the
+     * window is hidden, so a close interrupted by the system's bind/configure screen is finished
+     * here instead when the activity comes back: a sheet left on screen would keep swallowing every
+     * touch meant for the home.
+     */
+    private fun hideWidgetSheet() {
+        binding.widgetSheetPanel.animate().cancel()
+        binding.widgetSheetScrim.animate().cancel()
+        binding.widgetSheetPanel.translationY = 0f
+        binding.widgetSheetScrim.alpha = 1f
+        binding.widgetSheet.visibility = View.GONE
+    }
+
+    /**
+     * Slides the sheet out of the way of a widget being carried to the home screen, and back again.
+     * Nothing here accepts a drag, so this is only for the eye's sake: the point is to get the sheet
+     * out of the way so the user can see the grid they are aiming at.
      */
     private fun setWidgetSheetPeek(peek: Boolean) {
         if (!widgetSheetOpen || widgetSheetPeeking == peek) return
@@ -967,29 +1002,59 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** How far the widget behind [item] may be resized, cached because gestures ask repeatedly. */
+    /**
+     * How far the widget behind [item] may be resized, cached because gestures ask repeatedly.
+     * A provider's floors are capped at the span the widget already has: a widget the refit pass
+     * shrank below the size its provider asks for would otherwise be stuck, with every candidate
+     * either unchanged or overlapping a neighbour.
+     */
     private fun widgetResizeBounds(item: HomeItem): WidgetResizeBounds? {
         if (!item.isWidget) return null
-        widgetBoundsCache[item.appWidgetId]?.let { return it }
+        val provider = providerResizeBounds(item.appWidgetId)
+        return provider.copy(
+            minColSpan = provider.minColSpan.coerceAtMost(item.colSpan),
+            minRowSpan = provider.minRowSpan.coerceAtMost(item.rowSpan)
+        )
+    }
 
-        val info = appWidgetManager.getAppWidgetInfo(item.appWidgetId)
-        val bounds = if (info == null) {
-            WidgetResizeBounds(minColSpan = 1, minRowSpan = 1, horizontal = true, vertical = true)
-        } else {
-            val minimum = WidgetRepository.minimumResizeSpans(
-                info,
-                homeCellWidthDp(),
-                homeCellHeightDp(),
-                HomeGeometry.CELL_GAP_DP
-            )
-            WidgetResizeBounds(
-                minColSpan = minimum.first,
-                minRowSpan = minimum.second,
-                horizontal = info.resizeMode and AppWidgetProviderInfo.RESIZE_HORIZONTAL != 0,
-                vertical = info.resizeMode and AppWidgetProviderInfo.RESIZE_VERTICAL != 0
+    /**
+     * What the provider behind [appWidgetId] allows, before the current span is taken into account.
+     *
+     * Both axes are always offered. A provider's `resizeMode` only says which directions its author
+     * laid out a layout for; several common widgets are frozen on one axis because of it — the UPI
+     * widget declares "vertical only" and the Airtel one declares nothing at all, so neither could
+     * be made wider or narrower on the grid. The minimum span is still respected, so nothing can be
+     * squashed flat, and the provider is told the size it ended up with either way.
+     */
+    private fun providerResizeBounds(appWidgetId: Int): WidgetResizeBounds {
+        widgetBoundsCache[appWidgetId]?.let { return it }
+        // A provider that has gone leaves a placeholder behind, with no size of its own to respect.
+        // Limits read for an id that is allocated but still unbound are not remembered, or they
+        // would pin a placeholder's own onto the widget that turns up a moment later.
+        val info = appWidgetManager.getAppWidgetInfo(appWidgetId)
+        if (info == null) {
+            return WidgetResizeBounds(
+                minColSpan = 1,
+                minRowSpan = 1,
+                horizontal = true,
+                vertical = true
             )
         }
-        widgetBoundsCache[item.appWidgetId] = bounds
+
+        val minimum = WidgetRepository.minimumResizeSpans(
+            info,
+            homeCellWidthDp(),
+            homeCellHeightDp(),
+            HomeGeometry.CELL_GAP_DP
+        )
+
+        val bounds = WidgetResizeBounds(
+            minColSpan = minimum.first,
+            minRowSpan = minimum.second,
+            horizontal = true,
+            vertical = true
+        )
+        widgetBoundsCache[appWidgetId] = bounds
         return bounds
     }
 
@@ -1229,11 +1294,19 @@ class MainActivity : AppCompatActivity() {
     // ---------------------------------------------------------------- drag & drop
 
     /**
+     * True while the drag in flight is bringing something onto the home from another surface: an
+     * app out of the drawer, or a widget out of the picker. Such a drag has nothing to remove and
+     * must be free to land on the whole grid, top of the screen included.
+     */
+    private val dragCarriesNewItem: Boolean
+        get() = pendingDrawerApp != null || widgetDragItem != null
+
+    /**
      * Tracks the drag in flight: the remove target wakes up for it, and everything a drag
      * borrows — the drawer's place on screen, a page added for it — is given back when it ends.
      */
     private fun onDragState(dragging: Boolean) {
-        binding.homeRemoveTarget.alpha = if (dragging) 1f else 0f
+        binding.homeRemoveTarget.alpha = if (dragging && !dragCarriesNewItem) 1f else 0f
         if (dragging) {
             dragCreatedPage = null
             return
@@ -1262,6 +1335,11 @@ class MainActivity : AppCompatActivity() {
         widgetDragSourceBounds = screenBounds(source)
         widgetDragPulled = false
 
+        // A drop target is only told about a drag the view hierarchy can see, and the home has to be
+        // one of them for the widget to be able to land there. Coming from the drawer's app menu,
+        // the home is still hidden behind the drawer as it slides away.
+        binding.homeContainer.visibility = View.VISIBLE
+
         source.startDragAndDrop(
             ClipData.newPlainText(WIDGET_DRAG_LABEL, provider.label),
             View.DragShadowBuilder(source),
@@ -1273,29 +1351,16 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Drag events over the widget sheet. It stays put while the widget is still on its card and
-     * steps aside once the finger pulls the widget clear, exactly as the drawer does for apps.
+     * Judges a widget drag from where the finger is: the sheet steps aside as soon as the card has
+     * been pulled clear of its own box, and stays aside until the drag ends. The home reports every
+     * drag position it sees, and its grid reaches up under the sheet — so the report arrives while
+     * the finger is still on the card, which is exactly when it has to be judged.
      */
-    private fun onWidgetSheetDrag(view: View, event: DragEvent): Boolean {
-        val state = event.localState as? Workspace.DragState ?: return false
-        if (state.item.id != widgetDragItem?.id) return false
-
-        when (event.action) {
-            DragEvent.ACTION_DRAG_STARTED -> return true
-            DragEvent.ACTION_DRAG_LOCATION -> {
-                if (!widgetDragPulled) {
-                    val location = IntArray(2)
-                    view.getLocationOnScreen(location)
-                    val screenX = event.x.toInt() + location[0]
-                    val screenY = event.y.toInt() + location[1]
-                    if (!pulledClearOf(widgetDragSourceBounds, screenX, screenY)) return true
-                    widgetDragPulled = true
-                }
-                setWidgetSheetPeek(true)
-            }
-        }
-        // The sheet swallows any drop over it: a widget released here was not placed anywhere.
-        return true
+    private fun noteWidgetDragPosition(screenX: Int, screenY: Int) {
+        if (widgetDragItem == null || widgetDragPulled) return
+        if (!pulledClearOf(widgetDragSourceBounds, screenX, screenY)) return
+        widgetDragPulled = true
+        setWidgetSheetPeek(true)
     }
 
     /** Gives back what a widget drag borrowed: the card's looks, or the widget itself. */
@@ -1364,7 +1429,12 @@ class MainActivity : AppCompatActivity() {
      * view happened to receive it.
      */
     private fun noteDragPosition(screenX: Int, screenY: Int) {
-        if (pendingDrawerApp == null) return
+        if (pendingDrawerApp == null) {
+            // The same report feeds a widget drag, whose own listener stops seeing the finger the
+            // moment the sheet has stepped aside.
+            noteWidgetDragPosition(screenX, screenY)
+            return
+        }
         // A long press only becomes a drag once the app has been pulled clear of its own icon.
         // Until then the finger is still "on" the app, so the home is left alone.
         if (!drawerPulled) {
@@ -1535,6 +1605,9 @@ class MainActivity : AppCompatActivity() {
 
     /** A drag ran past the last page: add one for it, and take it away again if it stays empty. */
     private fun onDragRequestedNewPage() {
+        // A widget still held inside its own card is not reaching for another page: the grid sits
+        // under the picker, so it reports the finger before the drag has really left the card.
+        if (widgetDragItem != null && !widgetDragPulled) return
         if (dragCreatedPage != null) return
         val count = prefs.getHomePageCount()
         if (count >= MAX_HOME_PAGES) return

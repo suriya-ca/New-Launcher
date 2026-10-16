@@ -16,7 +16,6 @@
     <string name="home_edit_wallpaper">Wallpaper</string>
     <string name="home_edit_widgets">Widgets</string>
     <string name="home_edit_settings">Home settings</string>
-    <string name="home_edit_add_page">Add page</string>
     <string name="home_edit_done">Done</string>
     <string name="home_remove">Remove</string>
     <string name="home_remove_widget_title">Remove widget?</string>

@@ -343,22 +343,6 @@ class MainActivity : AppCompatActivity() {
                 if (refitWidgetSpans()) refreshHomeAndDock()
             }
         }
-
-        // Always attached (but transparent) in edit mode, so it can accept the drop. Only a drag of
-        // something already on the home has anything to remove: a widget lifted out of the picker
-        // or an app out of the drawer is not on the home yet, and accepting those would leave the
-        // target shadowing the top of the grid and swallowing the drop.
-        binding.homeRemoveTarget.setOnDragListener { _, event ->
-            val state = event.localState as? Workspace.DragState
-            when (event.action) {
-                DragEvent.ACTION_DRAG_STARTED -> state != null && !dragCarriesNewItem
-                DragEvent.ACTION_DROP -> {
-                    if (state != null && !dragCarriesNewItem) removeHomeItem(state.item)
-                    true
-                }
-                else -> true
-            }
-        }
     }
 
     private fun setupRecyclerViews() {
@@ -476,7 +460,6 @@ class MainActivity : AppCompatActivity() {
         binding.editSettings.setOnClickListener {
             startActivity(Intent(this, HomeSettingsActivity::class.java))
         }
-        binding.editAddPage.setOnClickListener { addHomePage() }
         binding.editDone.setOnClickListener { exitEditMode() }
 
         // The widget sheet is part of this window, so a widget can be dragged out of it. Nothing
@@ -812,9 +795,6 @@ class MainActivity : AppCompatActivity() {
         editMode = true
         binding.workspace.editing = true
         applyAppearanceSettings()
-        // Present but transparent, so it is eligible to receive the drop.
-        binding.homeRemoveTarget.visibility = View.VISIBLE
-        binding.homeRemoveTarget.alpha = 0f
         // Re-bind so widget cells switch their touch-blocking overlay on.
         refreshHomeAndDock()
     }
@@ -823,14 +803,11 @@ class MainActivity : AppCompatActivity() {
         if (!editMode) return
         editMode = false
         binding.workspace.editing = false
-        binding.homeRemoveTarget.visibility = View.GONE
 
         // The page count belongs to the user now: a page they added stays until they delete it.
         applyAppearanceSettings()
         refreshHomeAndDock()
     }
-
-    private fun addHomePage() = addHomePageAt(prefs.getHomePageCount())
 
     /**
      * A ＋ card in the overview was tapped: an empty page goes in at [index], pushing what is
@@ -1335,19 +1312,10 @@ class MainActivity : AppCompatActivity() {
     // ---------------------------------------------------------------- drag & drop
 
     /**
-     * True while the drag in flight is bringing something onto the home from another surface: an
-     * app out of the drawer, or a widget out of the picker. Such a drag has nothing to remove and
-     * must be free to land on the whole grid, top of the screen included.
-     */
-    private val dragCarriesNewItem: Boolean
-        get() = pendingDrawerApp != null || widgetDragItem != null
-
-    /**
-     * Tracks the drag in flight: the remove target wakes up for it, and everything a drag
-     * borrows — the drawer's place on screen, a page added for it — is given back when it ends.
+     * Tracks the drag in flight: everything a drag borrows — the drawer's place on screen, a page
+     * added for it — is given back when it ends.
      */
     private fun onDragState(dragging: Boolean) {
-        binding.homeRemoveTarget.alpha = if (dragging && !dragCarriesNewItem) 1f else 0f
         if (dragging) {
             dragCreatedPage = null
             return

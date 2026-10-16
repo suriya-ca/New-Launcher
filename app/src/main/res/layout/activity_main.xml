@@ -132,47 +132,10 @@
                     android:text="@string/home_edit_settings" />
 
                 <TextView
-                    android:id="@+id/edit_add_page"
-                    style="@style/HomeEditAction"
-                    android:text="@string/home_edit_add_page" />
-
-                <TextView
                     android:id="@+id/edit_done"
                     style="@style/HomeEditAction"
                     android:text="@string/home_edit_done" />
             </LinearLayout>
-        </LinearLayout>
-
-        <!-- Drop here to delete the item being dragged; only visible mid-drag. -->
-        <LinearLayout
-            android:id="@+id/home_remove_target"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="top|center_horizontal"
-            android:layout_marginTop="24dp"
-            android:background="@drawable/bg_remove_target"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:paddingStart="20dp"
-            android:paddingTop="10dp"
-            android:paddingEnd="20dp"
-            android:paddingBottom="10dp"
-            android:visibility="gone"
-            tools:visibility="gone">
-
-            <ImageView
-                android:layout_width="20dp"
-                android:layout_height="20dp"
-                android:contentDescription="@null"
-                android:src="@drawable/ic_delete" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:text="@string/home_remove"
-                android:textColor="#FFFFFFFF"
-                android:textSize="15sp" />
         </LinearLayout>
     </FrameLayout>
 

@@ -118,6 +118,9 @@ class MainActivity : AppCompatActivity() {
     private var drawerOpen = false
     private var editMode = false
 
+    /** True while the home's page overview is up: its cards stand in for the page chips. */
+    private var overviewShowing = false
+
     private lateinit var appWidgetHost: LauncherAppWidgetHost
     private lateinit var appWidgetManager: AppWidgetManager
 
@@ -310,6 +313,10 @@ class MainActivity : AppCompatActivity() {
         binding.workspace.onItemDrop = ::onHomeItemDropped
         binding.workspace.onAddPageRequested = ::onDragRequestedNewPage
         binding.workspace.onPagesReordered = ::onHomePagesReordered
+        binding.workspace.onPageDeleteRequested = ::confirmDeleteHomePage
+        binding.workspace.onAddPageTapped = ::addHomePageAt
+        binding.workspace.onOverviewChanged = ::onOverviewChanged
+        binding.workspace.maxPageCount = MAX_HOME_PAGES
         binding.workspace.onDragLocation = ::noteDragPosition
         binding.workspace.resizeBounds = ::widgetResizeBounds
         binding.workspace.onItemResize = ::onHomeItemResized
@@ -494,6 +501,7 @@ class MainActivity : AppCompatActivity() {
                 when {
                     widgetSheetOpen -> closeWidgetSheet()
                     drawerOpen -> closeDrawer()
+                    binding.workspace.isOverviewOpen() -> binding.workspace.closeOverview()
                     editMode -> exitEditMode()
                 }
             }
@@ -555,7 +563,9 @@ class MainActivity : AppCompatActivity() {
     private fun buildPageStrip(count: Int) {
         val group: LinearLayout = binding.homePageIndicator
         group.removeAllViews()
-        if (count <= 1 && !editMode) {
+        // The overview shows the pages themselves, with their own ✕ on each; a row of chips for
+        // the same pages underneath would only be saying it twice.
+        if (overviewShowing || (count <= 1 && !editMode)) {
             group.visibility = View.GONE
             return
         }
@@ -564,6 +574,12 @@ class MainActivity : AppCompatActivity() {
             group.addView(if (editMode) pageChip(index, count) else pageDot())
         }
         updateHomePageDots(binding.workspace.currentPage())
+    }
+
+    /** The page overview opened or closed: it stands in for the chip row while it is showing. */
+    private fun onOverviewChanged(open: Boolean) {
+        overviewShowing = open
+        buildPageStrip(prefs.getHomePageCount())
     }
 
     private fun pageDot(): ImageView {
@@ -708,7 +724,11 @@ class MainActivity : AppCompatActivity() {
     private fun onHomePagesReordered(from: Int, to: Int) {
         prefs.moveHomePage(from, to)
         refreshHomeAndDock()
-        binding.workspace.post { binding.workspace.goToPage(to) }
+        // With the overview up, the strip itself slides over to the page that moved; the scroll
+        // only has to follow along when the overview is not what is on screen.
+        if (!binding.workspace.isOverviewOpen()) {
+            binding.workspace.post { binding.workspace.goToPage(to) }
+        }
     }
 
     private fun onHomeItemLongClick(item: HomeItem, anchor: View) {
@@ -810,11 +830,21 @@ class MainActivity : AppCompatActivity() {
         refreshHomeAndDock()
     }
 
-    private fun addHomePage() {
-        if (prefs.getHomePageCount() >= MAX_HOME_PAGES) return
-        prefs.setHomePageCount(prefs.getHomePageCount() + 1)
+    private fun addHomePage() = addHomePageAt(prefs.getHomePageCount())
+
+    /**
+     * A ＋ card in the overview was tapped: an empty page goes in at [index], pushing what is
+     * already on that page and everything after it one page along. The card to the right of the
+     * pages asks for the end; the card to their left asks for the front.
+     */
+    private fun addHomePageAt(index: Int) {
+        val count = prefs.getHomePageCount()
+        if (count >= MAX_HOME_PAGES) return
+        prefs.insertHomePage(index.coerceIn(0, count))
         refreshHomeAndDock()
-        binding.workspace.post { binding.workspace.goToPage(prefs.getHomePageCount() - 1) }
+        binding.workspace.post {
+            binding.workspace.goToPage(index.coerceAtMost(prefs.getHomePageCount() - 1))
+        }
     }
 
     private fun openWallpaper() {

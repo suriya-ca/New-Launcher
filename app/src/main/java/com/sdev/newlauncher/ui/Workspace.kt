@@ -10,8 +10,10 @@ import android.graphics.Canvas
 import android.graphics.DashPathEffect
 import android.graphics.Paint
 import android.graphics.Rect
+import android.graphics.RectF
 import android.util.AttributeSet
 import android.view.DragEvent
+import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.VelocityTracker
 import android.view.View
@@ -26,6 +28,7 @@ import com.sdev.newlauncher.data.HomeItem
 import com.sdev.newlauncher.data.WidgetResizeBounds
 import kotlin.math.abs
 import kotlin.math.floor
+import kotlin.math.roundToInt
 
 /**
  * The home screen surface: a horizontally paged grid of free-positioned items.
@@ -72,6 +75,11 @@ class Workspace @JvmOverloads constructor(
             if (field != valid) {
                 field = valid
                 clampScroll()
+                if (overviewOpen || pageOverview < 1f) {
+                    // A page went away under the open overview: the strip has to fit what is left.
+                    overviewAnchor = overviewAnchor.coerceIn(overviewAnchorMin(), overviewAnchorMax())
+                    applyPagePreview()
+                }
                 requestLayout()
             }
         }
@@ -93,7 +101,11 @@ class Workspace @JvmOverloads constructor(
             for ((view, _) in entries) {
                 if (value) Jiggle.start(view) else Jiggle.stop(view)
             }
-            if (!value) selectedItemId = null
+            if (!value) {
+                // The overview only exists to arrange pages, which is a job done in edit mode.
+                closeOverviewNow()
+                selectedItemId = null
+            }
             invalidate()
         }
 
@@ -131,6 +143,30 @@ class Workspace @JvmOverloads constructor(
 
     /** `(from, to)` once a page has been dragged to a new position. */
     var onPagesReordered: ((Int, Int) -> Unit)? = null
+
+    /**
+     * The ✕ on a page card in the overview was tapped. The host confirms and deletes; this only
+     * reports which page was asked for. Kept apart from [onItemRemoveRequested], which is about an
+     * item sitting on a page rather than the page itself.
+     */
+    var onPageDeleteRequested: ((Int) -> Unit)? = null
+
+    /**
+     * A ＋ card at either end of the overview strip was tapped, so the host should add a page at
+     * the given index: `0` for the card to the left of the pages, `pageCount` for the one to the
+     * right. Deliberately not [onAddPageRequested]: that one is the "a drag ran past the last
+     * page" path, and the two are reached in completely different ways.
+     */
+    var onAddPageTapped: ((Int) -> Unit)? = null
+
+    /**
+     * Fires when the page overview opens or closes. It is a place the user stays in rather than a
+     * gesture that ends, so the host can put its own page chrome away while it is showing.
+     */
+    var onOverviewChanged: ((Boolean) -> Unit)? = null
+
+    /** Pages the host is willing to hold: the ＋ card is not drawn once [pageCount] reaches this. */
+    var maxPageCount: Int = 12
 
     /**
      * Called after each layout pass for every item, so callers can sync content that depends on
@@ -200,12 +236,6 @@ class Workspace @JvmOverloads constructor(
         color = 0xFFFFFFFF.toInt()
     }
 
-    /** Faint fill behind the frame drawn around a page while it is being dragged. */
-    private val pageFramePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.FILL
-        color = 0x1FFFFFFF
-    }
-
     /** Barely-there fill showing where the page the user is editing begins and ends. */
     private val editingPageFill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
@@ -220,16 +250,42 @@ class Workspace @JvmOverloads constructor(
         pathEffect = DashPathEffect(floatArrayOf(dp(6).toFloat(), dp(7).toFloat()), 0f)
     }
 
-    /** Faint card drawn around the pages either side while one of them is being dragged. */
-    private val neighbourPageFill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    /**
+     * The cards drawn behind the pages while one of them is dragged: plain fills and no frames,
+     * so the step back reads as calm rather than as a grid of outlines.
+     */
+    private val pageCardFill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
         color = 0x14000000
     }
 
-    private val neighbourPageFrame = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    /** The page in hand, filled a touch lighter so it reads as picked up. */
+    private val pageLiftedFill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        color = 0x1FFFFFFF
+    }
+
+    /** The slot the page in hand is heading for. */
+    private val pageTargetFill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        color = 0x2EFFFFFF
+    }
+
+    /**
+     * The add card at the end of the strip: a lighter fill than the pages, because it is an action
+     * rather than something already there.
+     */
+    private val pageAddCardFill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        color = 0x24FFFFFF
+    }
+
+    /** The ＋ drawn on it. */
+    private val pageAddGlyphPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        color = 0x33FFFFFF
-        strokeWidth = resources.displayMetrics.density * 2f
+        strokeCap = Paint.Cap.ROUND
+        strokeWidth = resources.displayMetrics.density * 3f
+        color = 0xFFFFFFFF.toInt()
     }
 
     private val scroller = OverScroller(context)
@@ -267,9 +323,50 @@ class Workspace @JvmOverloads constructor(
     private var pageOverview = 1f
     private var pageOverviewAnimator: ValueAnimator? = null
 
+    /**
+     * How far each page has stepped aside for the drag, in slots: 0 in its own slot and ±1 in the
+     * one the dragged page started from. Kept as a fraction and animated, so a page slides rather
+     * than jumping sideways when the drag crosses into another slot.
+     */
+    private var pageShifts = FloatArray(0)
+    private var pageShiftAnimator: ValueAnimator? = null
+
+    /**
+     * True while the overview is open on its own, with nobody's finger on it. A page drag opens it
+     * and letting go leaves it open: it is a place to add, remove and rearrange pages, not a
+     * gesture that has to be held.
+     */
+    private var overviewOpen = false
+
+    /**
+     * Which page slot the overview strip is lined up on, in pages, and how far it has been panned:
+     * the middle of the screen sits over this slot's middle. Fractional while a pan is in flight,
+     * and always a whole page at rest. Replaces [scrollX] in every overview calculation, because
+     * the strip is moved as a whole while the scroll underneath stays where it was.
+     */
+    private var overviewAnchor = 0f
+    private var overviewAnchorAnimator: ValueAnimator? = null
+
+    /** The zoom back in, which moves [pageOverview] and [overviewAnchor] together. */
+    private var overviewCloseAnimator: ValueAnimator? = null
+
+    /** Where the strip was when the finger went down, so a pan stays exactly under it. */
+    private var overviewAnchorAtDown = 0f
+
+    /** True once a press on the open strip has moved far enough to count as a pan, not a tap. */
+    private var overviewPanning = false
+
+    /** Where a page card sits on screen, worked out once and used for both drawing and hit-testing. */
+    private val overviewCardRect = RectF()
+
     private val longPressRunnable = Runnable {
-        // In edit mode an empty spot has no menu, so the same press starts a page drag instead.
-        if (editing) startPageDrag() else onEmptyLongPress?.invoke()
+        when {
+            // In the overview a hold lifts the page under it, if there is one there at all.
+            overviewOpen -> pageAt(downX, downY).takeIf { it >= 0 }?.let { startPageDrag(it) }
+            // In edit mode an empty spot has no menu, so the same press starts a page drag instead.
+            editing -> startPageDrag()
+            else -> onEmptyLongPress?.invoke()
+        }
     }
 
     init {
@@ -347,8 +444,13 @@ class Workspace @JvmOverloads constructor(
     fun currentPage(): Int {
         val width = width
         if (width <= 0) return 0
-        return ((scrollX + width / 2) / width).coerceIn(0, pageCount - 1)
+        // While the overview is open the strip, not the scroll, is what the user is pointing at.
+        val page = if (overviewOpen) floor(overviewAnchor + 0.5f) else ((scrollX + width / 2f) / width)
+        return page.toInt().coerceIn(0, pageCount - 1)
     }
+
+    /** Whether the page overview is on screen, open on its own rather than under a finger. */
+    fun isOverviewOpen(): Boolean = overviewOpen
 
     /** Animates to [page]. */
     fun goToPage(page: Int) {
@@ -428,6 +530,11 @@ class Workspace @JvmOverloads constructor(
         super.onScrollChanged(l, t, oldl, oldt)
         val width = width
         if (width <= 0) return
+        // A page preview is a transform on top of the children's own positions, and those carry
+        // -scrollX. Anything that moves the scroll while the overview is showing — a page added
+        // past the last one, a reorder settling — has to have the transform worked out again, or
+        // every page would slide sideways by the distance the scroll moved.
+        if (overviewOpen || pageOverview < 1f) applyPagePreview()
         val page = ((l + width / 2) / width).coerceIn(0, pageCount - 1)
         if (page != lastReportedPage) {
             lastReportedPage = page
@@ -445,6 +552,9 @@ class Workspace @JvmOverloads constructor(
     override fun onInterceptTouchEvent(ev: MotionEvent): Boolean {
         when (ev.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
+                // The open overview owns every touch from here: the pages underneath must not
+                // react to it, and a press on a card has to be able to lift that card.
+                if (overviewOpen) return true
                 downX = ev.x
                 downY = ev.y
                 lastX = ev.x
@@ -503,6 +613,19 @@ class Workspace @JvmOverloads constructor(
                 // The badge owns its gesture too: no long press, so a press there cannot start a
                 // drag that would move the item the badge belongs to.
                 if (badgeArmed) return true
+                if (overviewOpen) {
+                    // A press on the open strip can become a tap, a pan, or a hold that lifts a
+                    // page. It also stops a close that was still running, so the strip is where the
+                    // user last saw it rather than halfway back to full size.
+                    cancelOverviewClose()
+                    if (pageOverview > PAGE_OVERVIEW_SCALE + 0.001f) shrinkOverview()
+                    overviewAnchorAnimator?.cancel()
+                    overviewAnchorAtDown = overviewAnchor
+                    overviewPanning = false
+                    parent?.requestDisallowInterceptTouchEvent(true)
+                    postDelayed(longPressRunnable, longPressTimeout)
+                    return true
+                }
                 postDelayed(longPressRunnable, longPressTimeout)
                 return true
             }
@@ -515,6 +638,19 @@ class Workspace @JvmOverloads constructor(
                 if (badgeArmed) return true
                 if (pageDragging) {
                     updatePageDrag(event.x)
+                    return true
+                }
+                if (overviewOpen) {
+                    val dx = abs(event.x - downX)
+                    val dy = abs(event.y - downY)
+                    if (dx > touchSlop || dy > touchSlop) removeCallbacks(longPressRunnable)
+                    // Sideways moves pan the strip; a sideways pan is the only thing that moves it.
+                    if (overviewPanning || (dx > touchSlop && dx > dy)) {
+                        overviewPanning = true
+                        overviewAnchor = (overviewAnchorAtDown - (event.x - downX) / width)
+                            .coerceIn(overviewAnchorMin(), overviewAnchorMax())
+                        applyPagePreview()
+                    }
                     return true
                 }
                 val dx = abs(event.x - downX)
@@ -547,6 +683,19 @@ class Workspace @JvmOverloads constructor(
                 }
                 if (pageDragging) {
                     finishPageDrag(event.actionMasked == MotionEvent.ACTION_UP)
+                    return true
+                }
+                if (overviewOpen) {
+                    val wasPanning = overviewPanning
+                    overviewPanning = false
+                    settleAfterAnimation = false
+                    // A press that neither panned nor lifted a page is a tap on the strip.
+                    if (!wasPanning && event.actionMasked == MotionEvent.ACTION_UP &&
+                        abs(event.x - downX) <= touchSlop && abs(event.y - downY) <= touchSlop
+                    ) {
+                        handleOverviewTap(event.x, event.y)
+                    }
+                    stopTrackingVelocity()
                     return true
                 }
                 if (paging) {
@@ -812,7 +961,12 @@ class Workspace @JvmOverloads constructor(
     private fun handleDrag(event: DragEvent): Boolean {
         val state = event.localState as? DragState
         return when (event.action) {
-            DragEvent.ACTION_DRAG_STARTED -> state != null
+            DragEvent.ACTION_DRAG_STARTED -> {
+                // A drag is a full-screen gesture of its own: an overview still up would put every
+                // page at the wrong size and in the wrong place for where the drop lands.
+                closeOverviewNow()
+                state != null
+            }
             DragEvent.ACTION_DRAG_LOCATION -> {
                 if (state != null) {
                     dragItem = state.item
@@ -955,13 +1109,24 @@ class Workspace @JvmOverloads constructor(
     // ---------------------------------------------------------------- page reordering
 
     /** Lifts the page under an empty-space long press so it can be dragged somewhere else. */
-    private fun startPageDrag() {
+    private fun startPageDrag() = startPageDrag(currentPage())
+
+    /**
+     * Lifts [page] so it can be dragged to another slot, opening the overview around it. Letting go
+     * leaves the overview open: the add card, the ✕ on each page and the pan across the strip are
+     * all offered from there.
+     */
+    private fun startPageDrag(page: Int) {
         if (pageDragging || width <= 0) return
         // A settle still running from the last drag commits its reorder as it is cancelled, so it
         // has to be out of the way before this drag works out which page it is starting on.
+        cancelOverviewClose()
         pageOverviewAnimator?.cancel()
+        pageShiftAnimator?.cancel()
+        pageShiftAnimator = null
+        pageShifts = FloatArray(pageCount)
         pageDragging = true
-        pageDragFrom = currentPage()
+        pageDragFrom = page.coerceIn(0, pageCount - 1)
         pageDragTo = pageDragFrom
         pageDragOffsetX = 0f
         pageSettleOffset = 0f
@@ -971,9 +1136,33 @@ class Workspace @JvmOverloads constructor(
         for ((view, item) in entries) if (item.page == pageDragFrom) view.bringToFront()
         // The page owns this gesture: no paging and no drawer fling while it is dragged.
         parent?.requestDisallowInterceptTouchEvent(true)
+        performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+        openOverview()
         shrinkOverview()
         applyPagePreview()
     }
+
+    /** Takes the overview on as something that stays open, without moving the strip under it. */
+    private fun openOverview() {
+        if (overviewOpen) return
+        overviewOpen = true
+        overviewAnchor = scrollX.toFloat() / width
+        onOverviewChanged?.invoke(true)
+    }
+
+    /** The furthest the strip may be panned: the add cards themselves may be brought to the middle. */
+    private fun overviewAnchorMax(): Float =
+        if (pageCount < maxPageCount) pageCount.toFloat() else (pageCount - 1).toFloat()
+
+    /** The nearest the strip may be panned: the add card to the left of the pages, or the first page. */
+    private fun overviewAnchorMin(): Float = if (pageCount < maxPageCount) -1f else 0f
+
+    /**
+     * The content x the strip is lined up on. While nothing is showing that is simply the scroll;
+     * while the overview is up the strip has been panned away from it.
+     */
+    private fun overviewAnchorPx(): Float =
+        if (overviewOpen || pageOverview < 1f) overviewAnchor * width else scrollX.toFloat()
 
     /**
      * Shrinks the home for a page drag so the pages either side come into view. Only [pageOverview]
@@ -981,6 +1170,7 @@ class Workspace @JvmOverloads constructor(
      * pages around the one being dragged.
      */
     private fun shrinkOverview() {
+        cancelOverviewClose()
         pageOverviewAnimator?.cancel()
         pageOverviewAnimator = ValueAnimator
             .ofFloat(pageOverview, PAGE_OVERVIEW_SCALE)
@@ -997,6 +1187,14 @@ class Workspace @JvmOverloads constructor(
 
     private fun updatePageDrag(x: Float) {
         pageDragOffsetX = x - downX
+        // What moves the other pages is the slot the drag has crossed into, not the pixel under
+        // the finger, so the change there is what slides them and ticks.
+        val slot = pageDragTarget()
+        if (slot != pageDragTo) {
+            pageDragTo = slot
+            performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+            animatePageShifts()
+        }
         applyPagePreview()
     }
 
@@ -1007,15 +1205,63 @@ class Workspace @JvmOverloads constructor(
     private fun pageDragTarget(): Int {
         val viewWidth = width
         if (viewWidth <= 0) return pageDragFrom
-        val steps = floor(pageDragOffsetX / (viewWidth * PAGE_OVERVIEW_SCALE) + 0.5f).toInt()
+        val steps = floor(pageDragOffsetX / (viewWidth * pageOverview) + 0.5f).toInt()
         return (pageDragFrom + steps).coerceIn(0, pageCount - 1)
     }
 
     /** The slot the pages are heading for, whether or not a finger is still deciding it. */
-    private fun pageDragSlot(): Int = if (pageDragging) pageDragTarget() else pageDragTo
+    private fun pageDragSlot(): Int = pageDragTo
 
-    /** How far a page travels to take a slot [steps] away: one shrunk page per slot crossed. */
-    private fun pageSlotOffset(steps: Int): Float = steps * width * PAGE_OVERVIEW_SCALE
+    /**
+     * How far a page travels to take a slot [steps] away: one shrunk page per slot crossed.
+     *
+     * The size used is the one on screen at this instant rather than the settled
+     * [PAGE_OVERVIEW_SCALE], so the pages line up with the cards drawn over them on every frame of
+     * the shrink. Using the settled size instead made a still near-full-size page lurch half a
+     * slot sideways the moment a drag crossed into another slot.
+     */
+    private fun pageSlotOffset(steps: Int): Float = steps * width * pageOverview
+
+    /** The slot a page is stepping aside for, in slots: 0 in its own, ±1 in the one left behind. */
+    private fun pageShiftTarget(page: Int): Float {
+        val from = pageDragFrom
+        val to = pageDragTo
+        return when {
+            from < to && page in (from + 1)..to -> -1f
+            to < from && page in to until from -> 1f
+            else -> 0f
+        }
+    }
+
+    /** How far a page has stepped aside right now, in slots, eased towards [pageShiftTarget]. */
+    private fun pageShift(page: Int): Float = pageShifts.getOrElse(page) { 0f }
+
+    /** Slides the pages towards the slots this drag is putting them in, rather than snapping them. */
+    private fun animatePageShifts() {
+        val count = pageCount
+        if (pageShifts.size != count) {
+            pageShifts = FloatArray(count) { pageShifts.getOrElse(it) { 0f } }
+        }
+        val start = pageShifts.copyOf()
+        val end = FloatArray(count) { pageShiftTarget(it) }
+        pageShiftAnimator?.cancel()
+        if ((0 until count).all { abs(start[it] - end[it]) < 0.001f }) {
+            pageShifts = end
+            return
+        }
+        pageShiftAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = PAGE_SHIFT_MS
+            interpolator = DecelerateInterpolator()
+            addUpdateListener {
+                val progress = it.animatedValue as Float
+                for (index in 0 until count) {
+                    pageShifts[index] = start[index] + (end[index] - start[index]) * progress
+                }
+                applyPagePreview()
+            }
+            start()
+        }
+    }
 
     /**
      * How far a page sits from its slot while another page is dragged over it, in screen pixels.
@@ -1023,18 +1269,14 @@ class Workspace @JvmOverloads constructor(
      * the lifted page keeps tracking the finger.
      */
     private fun pagePreviewOffset(page: Int): Float {
-        val viewWidth = width
-        if (viewWidth <= 0) return 0f
+        if (width <= 0) return 0f
         val from = pageDragFrom
-        val to = pageDragSlot()
-        return when {
+        return if (page == from) {
             // The lifted page follows the finger, then settles into the slot it was let go on.
-            page == from ->
-                if (pageDragging) pageDragOffsetX
-                else pageSlotOffset(to - from) + pageSettleOffset
-            from < to && page in (from + 1)..to -> -pageSlotOffset(1)
-            to < from && page in to until from -> pageSlotOffset(1)
-            else -> 0f
+            if (pageDragging) pageDragOffsetX
+            else pageSlotOffset(pageDragTo - from) + pageSettleOffset
+        } else {
+            pageShift(page) * pageSlotOffset(1)
         }
     }
 
@@ -1056,9 +1298,15 @@ class Workspace @JvmOverloads constructor(
      * where that middle belongs, which is what an overall scale would do to it.
      */
     private fun applyPagePreview() {
+        if (width <= 0) return
         val bounds = Rect()
         val middleX = width / 2f
         val middleY = height / 2f
+        val anchorPx = overviewAnchorPx()
+        // Children are laid out in content space and the canvas then carries -scrollX, so their
+        // translations have to undo wherever the scroll has got to and put the strip where the
+        // overview says it is instead. Both terms vanish when the overview is shut.
+        val scrollLift = pageOverview * (scrollX - anchorPx)
         for ((view, item) in entries) {
             itemBounds(item, bounds)
             view.pivotX = view.width / 2f
@@ -1068,16 +1316,22 @@ class Workspace @JvmOverloads constructor(
             // Where the item's middle sits once the page has been shrunk, plus the distance its
             // page is travelling sideways: all three are lengths in the space this view draws in.
             view.translationX = (pageOverview - 1f) * (bounds.centerX() - scrollX - middleX) +
+                scrollLift +
                 pagePreviewOffset(item.page)
             view.translationY = (pageOverview - 1f) * (bounds.centerY() - middleY)
-            // Everything but the page in hand steps back, so the one being moved reads as lifted.
-            view.alpha = if (item.page == pageDragFrom) 1f else pagePreviewAlpha
+            // Everything but the page in hand steps back while that page is being dragged. An open
+            // overview nobody is holding shows every page at full strength: it is a place to read
+            // the pages and pick one, not a drag in progress.
+            view.alpha = if (!pageDragging || item.page == pageDragFrom) 1f else pagePreviewAlpha
         }
         invalidate()
     }
 
     /** Puts every item back to full size, exactly where it was laid out. */
     private fun clearPagePreview() {
+        pageShiftAnimator?.cancel()
+        pageShiftAnimator = null
+        pageShifts = FloatArray(0)
         for ((view, _) in entries) {
             view.translationX = 0f
             view.translationY = 0f
@@ -1088,9 +1342,202 @@ class Workspace @JvmOverloads constructor(
         invalidate()
     }
 
+    // ---------------------------------------------------------------- page overview controls
+
+    /**
+     * Zooms back in on [page], or on the slot the strip is pointing at when no page is given, and
+     * closes the overview. [pageOverview] and the strip's anchor travel together, so whatever sat
+     * in the middle of the strip is what fills the screen at the end.
+     */
+    fun closeOverview(page: Int = -1) {
+        if (!overviewOpen || width <= 0) return
+        cancelOverviewClose()
+        pageOverviewAnimator?.cancel()
+        pageShiftAnimator?.cancel()
+        pageShiftAnimator = null
+        pageShifts = FloatArray(0)
+        pageDragging = false
+        pageDragOffsetX = 0f
+        pageSettleOffset = 0f
+        pageDragTo = pageDragFrom
+        val target = (if (page in 0 until pageCount) page else overviewAnchor.roundToInt())
+            .coerceIn(0, pageCount - 1)
+
+        val overviewFrom = pageOverview
+        val anchorFrom = overviewAnchor
+        overviewCloseAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = PAGE_OVERVIEW_MS
+            interpolator = DecelerateInterpolator()
+            addUpdateListener {
+                val progress = it.animatedValue as Float
+                pageOverview = overviewFrom + (1f - overviewFrom) * progress
+                overviewAnchor = anchorFrom + (target - anchorFrom) * progress
+                applyPagePreview()
+            }
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: Animator) {
+                    // A close cut short by a new gesture is nulled out before it is cancelled, so
+                    // the listener has to ignore that one rather than finish an abandoned close.
+                    if (animation !== overviewCloseAnimator) return
+                    overviewCloseAnimator = null
+                    finishOverviewClose(target)
+                }
+            })
+            start()
+        }
+    }
+
+    /**
+     * Drops the overview where it stands, with no animation. For the changes that cannot wait for
+     * one: leaving edit mode, and a drag arriving that has to be laid out on an unscaled home.
+     */
+    private fun closeOverviewNow() {
+        val wasOpen = overviewOpen
+        val wasShowing = pageOverview
+        cancelOverviewClose()
+        pageOverviewAnimator?.cancel()
+        pageShiftAnimator?.cancel()
+        pageShiftAnimator = null
+        pageShifts = FloatArray(0)
+        pageDragging = false
+        pageDragOffsetX = 0f
+        pageSettleOffset = 0f
+        pageDragTo = pageDragFrom
+        if (!wasOpen && wasShowing >= 1f) return
+
+        val target = overviewAnchor.roundToInt().coerceIn(0, pageCount - 1)
+        overviewOpen = false
+        pageOverview = 1f
+        overviewAnchor = target.toFloat()
+        clearPagePreview()
+        scrollTo(target * width, 0)
+        if (wasOpen) onOverviewChanged?.invoke(false)
+    }
+
+    /** Cancels a close still in flight without letting it finish, so the overview can carry on. */
+    private fun cancelOverviewClose() {
+        val running = overviewCloseAnimator ?: return
+        overviewCloseAnimator = null
+        running.cancel()
+    }
+
+    /** The last frame of a close: the scroll catches up with the strip, now back at full size. */
+    private fun finishOverviewClose(target: Int) {
+        overviewOpen = false
+        pageOverview = 1f
+        overviewAnchor = target.toFloat()
+        clearPagePreview()
+        scrollTo(target * width, 0)
+        onOverviewChanged?.invoke(false)
+    }
+
+    /** Slides the strip to [page], which is how a page just added is brought into view. */
+    private fun animateOverviewAnchorTo(page: Float) {
+        overviewAnchorAnimator?.cancel()
+        val from = overviewAnchor
+        val target = page.coerceIn(overviewAnchorMin(), overviewAnchorMax())
+        if (abs(from - target) < 0.001f) return
+        overviewAnchorAnimator = ValueAnimator.ofFloat(from, target).apply {
+            duration = PAGE_ANIM_MS.toLong()
+            interpolator = DecelerateInterpolator()
+            addUpdateListener {
+                overviewAnchor = it.animatedValue as Float
+                applyPagePreview()
+            }
+            start()
+        }
+    }
+
+    /** What a tap on the open overview does: remove a page, add one, or pick the page to open. */
+    private fun handleOverviewTap(x: Float, y: Float) {
+        val deletePage = closeCardAt(x, y)
+        if (deletePage >= 0) {
+            if (pageCount > 1) {
+                performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                onPageDeleteRequested?.invoke(deletePage)
+            }
+            return
+        }
+        val addAt = addCardAt(x, y)
+        if (addAt >= 0) {
+            performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+            onAddPageTapped?.invoke(addAt)
+            // The host has already added the page, so the strip follows it and the new, empty card
+            // is what comes into the middle rather than the page that was there before.
+            animateOverviewAnchorTo(if (addAt == 0) 0f else (pageCount - 1).toFloat())
+            return
+        }
+        val page = pageAt(x, y)
+        if (page >= 0) closeOverview(page)
+    }
+
+    /** Where a page's card sits on screen, which is what both its drawing and its hit-test use. */
+    private fun pageCardRect(page: Int, offsetX: Float, out: RectF) {
+        val scale = pageOverview
+        val anchorPx = overviewAnchorPx()
+        val middleX = width / 2f
+        val middleY = height / 2f
+        val left = page * width + paddingLeft
+        val right = page * width + width - paddingRight
+        val top = paddingTop
+        val bottom = height - paddingBottom
+        out.set(
+            middleX + scale * (left - anchorPx - middleX) + offsetX,
+            middleY + scale * (top - middleY),
+            middleX + scale * (right - anchorPx - middleX) + offsetX,
+            middleY + scale * (bottom - middleY)
+        )
+    }
+
+    /** Centre of a page card's ✕, in view coordinates: what drawing and hit-testing both use. */
+    private fun pageCloseX(rect: RectF): Float =
+        rect.right - dp(PAGE_CLOSE_INSET_DP) - dp(PAGE_CLOSE_DOT_DP) / 2f
+
+    private fun pageCloseY(rect: RectF): Float =
+        rect.top + dp(PAGE_CLOSE_INSET_DP) + dp(PAGE_CLOSE_DOT_DP) / 2f
+
+    /** The page whose ✕ covers the view-local point, or -1. The only page left cannot be deleted. */
+    private fun closeCardAt(x: Float, y: Float): Int {
+        if (width <= 0 || pageCount <= 1) return -1
+        val half = dp(PAGE_CLOSE_TOUCH_DP) / 2f
+        for (page in 0 until pageCount) {
+            pageCardRect(page, pagePreviewOffset(page), overviewCardRect)
+            if (abs(x - pageCloseX(overviewCardRect)) <= half &&
+                abs(y - pageCloseY(overviewCardRect)) <= half
+            ) {
+                return page
+            }
+        }
+        return -1
+    }
+
+    /**
+     * Which add card the view-local point is on, and the index a page added there would go to:
+     * `0` for the card to the left of the pages, [pageCount] for the one to the right, and -1 when
+     * the point is on neither. Both go away once the host will not take another page.
+     */
+    private fun addCardAt(x: Float, y: Float): Int {
+        if (width <= 0 || pageCount >= maxPageCount) return -1
+        pageCardRect(-1, 0f, overviewCardRect)
+        if (overviewCardRect.contains(x, y)) return 0
+        pageCardRect(pageCount, 0f, overviewCardRect)
+        if (overviewCardRect.contains(x, y)) return pageCount
+        return -1
+    }
+
+    /** The page whose card covers the view-local point, or -1 when the press is between cards. */
+    private fun pageAt(x: Float, y: Float): Int {
+        if (width <= 0 || pageOverview >= 1f) return -1
+        for (page in 0 until pageCount) {
+            pageCardRect(page, pagePreviewOffset(page), overviewCardRect)
+            if (overviewCardRect.contains(x, y)) return page
+        }
+        return -1
+    }
+
     private fun finishPageDrag(commit: Boolean) {
         val from = pageDragFrom
-        val to = pageDragTarget()
+        val to = pageDragTo
         val reordering = commit && to != from
         pageDragging = false
         pageDragTo = if (reordering) to else from
@@ -1098,16 +1545,68 @@ class Workspace @JvmOverloads constructor(
         // so letting go never snaps the page.
         pageSettleOffset = pageDragOffsetX - pageSlotOffset(pageDragTo - from)
         pageDragOffsetX = 0f
+        // The pages that stepped aside follow the one in hand back or into place.
+        animatePageShifts()
+        performHapticFeedback(
+            if (reordering) HapticFeedbackConstants.CONFIRM else HapticFeedbackConstants.CLOCK_TICK
+        )
         parent?.requestDisallowInterceptTouchEvent(false)
-        settlePageDrag { if (reordering) onPagesReordered?.invoke(from, to) }
+        settlePageDrag {
+            if (reordering) {
+                onPagesReordered?.invoke(from, to)
+                // The page that was moved is the one the user's eye followed across the strip, so
+                // it is the one that takes the middle — the same thing scrolling to it does once
+                // the overview is shut.
+                if (overviewOpen) animateOverviewAnchorTo(to.toFloat())
+            }
+        }
     }
 
     /**
-     * Grows the home back once a page drag is over and slides the lifted page into the slot it was
-     * let go on. A committed reorder is only applied when that has finished: by then the pages are
-     * already drawn where the reorder puts them, so applying it cannot be seen as a jump.
+     * Settles the page just let go: it slides into the slot the drag was heading for while the
+     * overview stays open around it. A committed reorder is only applied when that has finished:
+     * by then every page is already drawn where the reorder puts it, so applying it cannot be seen
+     * as a jump. The overview only grows back when the user leaves it.
      */
     private fun settlePageDrag(onSettled: () -> Unit) {
+        if (!overviewOpen) {
+            // Nothing should get here — the overview opens with every page drag — but if it does,
+            // the home has to come back to full size rather than stay shrunk with no way out.
+            growHomeBack(onSettled)
+            return
+        }
+        cancelOverviewClose()
+        pageOverviewAnimator?.cancel()
+        val overviewFrom = pageOverview
+        val settleFrom = pageSettleOffset
+        pageOverviewAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = PAGE_OVERVIEW_MS
+            interpolator = DecelerateInterpolator()
+            addUpdateListener {
+                val progress = it.animatedValue as Float
+                pageOverview = overviewFrom + (PAGE_OVERVIEW_SCALE - overviewFrom) * progress
+                pageSettleOffset = settleFrom * (1f - progress)
+                applyPagePreview()
+            }
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: Animator) {
+                    pageOverview = PAGE_OVERVIEW_SCALE
+                    pageSettleOffset = 0f
+                    pageDragOffsetX = 0f
+                    pageDragTo = pageDragFrom
+                    pageShiftAnimator?.cancel()
+                    pageShiftAnimator = null
+                    pageShifts = FloatArray(0)
+                    applyPagePreview()
+                    onSettled()
+                }
+            })
+            start()
+        }
+    }
+
+    /** Grows the home back to full size and hands the lifted page to its slot, as at rest. */
+    private fun growHomeBack(onSettled: () -> Unit) {
         pageOverviewAnimator?.cancel()
         val overviewFrom = pageOverview
         val settleFrom = pageSettleOffset
@@ -1151,24 +1650,82 @@ class Workspace @JvmOverloads constructor(
     }
 
     /**
-     * Outlines one page as a card: the page's own slot shrunk about the middle of the screen by
-     * [pageOverview], then shifted sideways by [offsetX]. The shift is applied outside the shrink
-     * because it is a distance the finger travelled: a page follows the finger as far as it moves.
+     * One page as a card: its own slot shrunk about the middle of the screen by [pageOverview],
+     * then shifted sideways by [offsetX]. The shrink is worked out in screen space by
+     * [pageCardRect] and put back into content space to be drawn, because this canvas already
+     * carries -scrollX for everything it is handed.
      */
-    private fun drawPageCard(canvas: Canvas, page: Int, offsetX: Float, fill: Paint, frame: Paint) {
-        val viewWidth = width
-        if (viewWidth <= 0 || page !in 0 until pageCount) return
+    private fun drawPageCard(canvas: Canvas, page: Int, offsetX: Float, fill: Paint) {
+        if (width <= 0 || page !in 0 until pageCount) return
         val radius = dp(SELECTION_RADIUS_DP).toFloat()
-        val left = (page * viewWidth + paddingLeft).toFloat()
-        val right = (page * viewWidth + viewWidth - paddingRight).toFloat()
-        val top = paddingTop.toFloat()
-        val bottom = (height - paddingBottom).toFloat()
-        val save = canvas.save()
-        canvas.translate(offsetX, 0f)
-        canvas.scale(pageOverview, pageOverview, scrollX + width / 2f, height / 2f)
-        canvas.drawRoundRect(left, top, right, bottom, radius, radius, fill)
-        canvas.drawRoundRect(left, top, right, bottom, radius, radius, frame)
-        canvas.restoreToCount(save)
+        pageCardRect(page, offsetX, overviewCardRect)
+        canvas.drawRoundRect(
+            overviewCardRect.left + scrollX,
+            overviewCardRect.top,
+            overviewCardRect.right + scrollX,
+            overviewCardRect.bottom,
+            radius,
+            radius,
+            fill
+        )
+    }
+
+    /**
+     * The add cards: one immediately before the first page and one immediately after the last, so
+     * the way to make a page is always at whichever end the strip has been panned to. Each is a
+     * lighter fill than the pages, because it is an action rather than something already there,
+     * with a ＋ on it and nothing else — no ✕, since there is no page there to remove.
+     */
+    private fun drawAddCards(canvas: Canvas) {
+        if (width <= 0 || pageCount >= maxPageCount) return
+        drawAddCard(canvas, pageCount)
+        drawAddCard(canvas, -1)
+    }
+
+    /** The card in slot [page], which is one past the end of the pages in either direction. */
+    private fun drawAddCard(canvas: Canvas, page: Int) {
+        val radius = dp(SELECTION_RADIUS_DP).toFloat()
+        pageCardRect(page, 0f, overviewCardRect)
+        val rect = overviewCardRect
+        canvas.drawRoundRect(
+            rect.left + scrollX,
+            rect.top,
+            rect.right + scrollX,
+            rect.bottom,
+            radius,
+            radius,
+            pageAddCardFill
+        )
+        val centreX = (rect.left + rect.right) / 2f + scrollX
+        val centreY = (rect.top + rect.bottom) / 2f
+        val arm = dp(PAGE_ADD_ARM_DP) / 2f
+        canvas.drawLine(centreX - arm, centreY, centreX + arm, centreY, pageAddGlyphPaint)
+        canvas.drawLine(centreX, centreY - arm, centreX, centreY + arm, pageAddGlyphPaint)
+    }
+
+    /**
+     * The ✕ on a page card: how a page is removed without leaving the overview. The disc and cross
+     * are the delete badge's, so removing a page looks the same as removing the thing on it. It is
+     * dimmed rather than hidden when it cannot be used, so the one remaining page still reads as
+     * a page you are on rather than a button that is broken.
+     */
+    private fun drawPageClose(canvas: Canvas, page: Int, offsetX: Float) {
+        if (width <= 0) return
+        pageCardRect(page, offsetX, overviewCardRect)
+        val rect = overviewCardRect
+        if (rect.right < 0f || rect.left > width) return
+        val centreX = pageCloseX(rect) + scrollX
+        val centreY = pageCloseY(rect)
+        val enabled = pageCount > 1
+        badgePaint.alpha = if (enabled) 0xCC else 0x4D
+        badgeCrossPaint.alpha = if (enabled) 0xFF else 0x4D
+        val radius = dp(PAGE_CLOSE_DOT_DP) / 2f
+        canvas.drawCircle(centreX, centreY, radius, badgePaint)
+        val arm = radius * 0.38f
+        canvas.drawLine(centreX - arm, centreY - arm, centreX + arm, centreY + arm, badgeCrossPaint)
+        canvas.drawLine(centreX + arm, centreY - arm, centreX - arm, centreY + arm, badgeCrossPaint)
+        badgePaint.alpha = 0xCC
+        badgeCrossPaint.alpha = 0xFF
     }
 
     override fun dispatchDraw(canvas: Canvas) {
@@ -1178,22 +1735,17 @@ class Workspace @JvmOverloads constructor(
                 it.draw(canvas)
             }
         }
-        if (pageDragging || pageOverview < 1f) {
-            // Every page as a card: the neighbours faint, the target lit, the lifted one on top.
+        val overviewShowing = pageDragging || pageOverview < 1f
+        if (overviewShowing) {
+            // Every page as a card: the rest plain, the target lit, the lifted one on top.
             val target = pageDragSlot()
             for (page in 0 until pageCount) {
                 if (page == pageDragFrom) continue
-                val fill = if (page == target) editingPageFill else neighbourPageFill
-                val frame = if (page == target) editingPageFrame else neighbourPageFrame
-                drawPageCard(canvas, page, pagePreviewOffset(page), fill, frame)
+                val fill = if (page == target) pageTargetFill else pageCardFill
+                drawPageCard(canvas, page, pagePreviewOffset(page), fill)
             }
-            drawPageCard(
-                canvas,
-                pageDragFrom,
-                pagePreviewOffset(pageDragFrom),
-                pageFramePaint,
-                framePaint
-            )
+            drawPageCard(canvas, pageDragFrom, pagePreviewOffset(pageDragFrom), pageLiftedFill)
+            drawAddCards(canvas)
         } else if (editing) {
             // Editing a page is a job done inside its bounds, so show them.
             drawPageFrame(canvas, currentPage(), 0f, editingPageFill, editingPageFrame)
@@ -1202,7 +1754,13 @@ class Workspace @JvmOverloads constructor(
 
         // Above the items: a filled placement would hide both of these underneath it.
         if (previewVisible) drawResizePreview(canvas)
-        if (!resizing && dragSource == null && editing) selectedItem()?.let { drawSelection(canvas, it) }
+        if (!overviewShowing && !resizing && dragSource == null && editing) {
+            selectedItem()?.let { drawSelection(canvas, it) }
+        }
+        // And above those: the ✕ has to be reachable even on a page that holds a big widget.
+        if (overviewShowing) {
+            for (page in 0 until pageCount) drawPageClose(canvas, page, pagePreviewOffset(page))
+        }
     }
 
     /** The outline that follows a handle drag: usable, or refused where it currently sits. */
@@ -1275,12 +1833,15 @@ class Workspace @JvmOverloads constructor(
         const val FLING_VELOCITY = 900f
 
         /**
-         * How far the home shrinks while a page is dragged, leaving a quarter of each neighbour
-         * on screen, how far the untouched pages step back, and how long both take.
+         * How far the home shrinks while a page is dragged, how far the untouched pages step back,
+         * and how long both take.
          */
-        const val PAGE_OVERVIEW_SCALE = 0.5f
+        const val PAGE_OVERVIEW_SCALE = 0.7f
         const val PAGE_OVERVIEW_ALPHA = 0.4f
         const val PAGE_OVERVIEW_MS = 180L
+
+        /** How long a page takes to slide aside when the slot a drag is heading for changes. */
+        const val PAGE_SHIFT_MS = 140L
 
         /** How close to an edge a drag has to be to roll the page over, and how often it repeats. */
         const val DRAG_EDGE_DP = 48
@@ -1308,5 +1869,13 @@ class Workspace @JvmOverloads constructor(
         const val BADGE_TOUCH_DP = 44
         const val MIN_BADGE_TOUCH_DP = 28
         const val BADGE_DOT_DP = 24
+
+        /** The ✕ on a page card: its disc, how far it sits into the corner, and its grab box. */
+        const val PAGE_CLOSE_DOT_DP = 24
+        const val PAGE_CLOSE_INSET_DP = 10
+        const val PAGE_CLOSE_TOUCH_DP = 48
+
+        /** The ＋ on the add card: the length of each arm. */
+        const val PAGE_ADD_ARM_DP = 34
     }
 }

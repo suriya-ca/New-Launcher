@@ -44,6 +44,20 @@ class LauncherPrefs(context: Context) {
         setHomePageCount(count - 1)
     }
 
+    /**
+     * Inserts an empty page at [index], pushing the items on that page and every later one a page
+     * along, so the pages that remain are still consecutive. Inserting at the end is simply one
+     * more page.
+     */
+    fun insertHomePage(index: Int) {
+        val count = getHomePageCount()
+        val at = index.coerceIn(0, count)
+        setHomeItems(
+            getHomeItems().map { if (it.page >= at) it.copy(page = it.page + 1) else it }
+        )
+        setHomePageCount(count + 1)
+    }
+
     /** Moves page [from] to position [to], sliding the pages in between along with it. */
     fun moveHomePage(from: Int, to: Int) {
         val count = getHomePageCount()

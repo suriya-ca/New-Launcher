@@ -19,6 +19,8 @@
     <string name="home_edit_add_page">Add page</string>
     <string name="home_edit_done">Done</string>
     <string name="home_remove">Remove</string>
+    <string name="home_remove_widget_title">Remove widget?</string>
+    <string name="home_remove_widget_message">It leaves the home screen. You can add it again from Widgets.</string>
 
     <!-- Widgets -->
     <string name="widgets_title">Add a widget</string>

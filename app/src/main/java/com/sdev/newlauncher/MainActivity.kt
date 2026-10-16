@@ -313,6 +313,7 @@ class MainActivity : AppCompatActivity() {
         binding.workspace.onDragLocation = ::noteDragPosition
         binding.workspace.resizeBounds = ::widgetResizeBounds
         binding.workspace.onItemResize = ::onHomeItemResized
+        binding.workspace.onItemRemoveRequested = ::confirmRemoveHomeItem
         binding.workspace.onItemLaidOut = { view, item ->
             // Reported after the traversal: telling a provider its size can bounce an update back
             // that requests layout, and doing that from inside a layout pass is not allowed.
@@ -769,6 +770,16 @@ class MainActivity : AppCompatActivity() {
         prefs.setHomeItems(items)
         if (page + 1 > prefs.getHomePageCount()) prefs.setHomePageCount(page + 1)
         refreshHomeAndDock()
+    }
+
+    /** The delete badge on the selected item was tapped: confirm before the item goes. */
+    private fun confirmRemoveHomeItem(item: HomeItem) {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.home_remove_widget_title)
+            .setMessage(R.string.home_remove_widget_message)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.home_remove) { _, _ -> removeHomeItem(item) }
+            .show()
     }
 
     private fun removeHomeItem(item: HomeItem) {

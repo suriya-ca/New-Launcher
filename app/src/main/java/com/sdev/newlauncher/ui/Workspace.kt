@@ -140,6 +140,12 @@ class Workspace @JvmOverloads constructor(
     /** Called with the same placement and a new span once a resize gesture is released. */
     var onItemResize: ((HomeItem) -> Unit)? = null
 
+    /**
+     * Called when the delete badge on the selected item is tapped. The host confirms and removes;
+     * the workspace only reports the request.
+     */
+    var onItemRemoveRequested: ((HomeItem) -> Unit)? = null
+
     /** The item whose resize handles are on screen, if any. */
     var selectedItemId: String? = null
         private set
@@ -164,6 +170,9 @@ class Workspace @JvmOverloads constructor(
     private var resizeLimit: WidgetResizeBounds? = null
     private var resizeCorner = CORNER_NONE
 
+    /** True while a touch that began on the delete badge is still deciding to be a tap. */
+    private var badgeArmed = false
+
     /** Translucent white reads on any wallpaper. */
     private val framePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
@@ -172,6 +181,18 @@ class Workspace @JvmOverloads constructor(
     }
     private val handlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
+        color = 0xFFFFFFFF.toInt()
+    }
+
+    /** The delete badge: the same dark disc and white cross the page chips use. */
+    private val badgePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        color = 0xCC000000.toInt()
+    }
+    private val badgeCrossPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+        strokeWidth = resources.displayMetrics.density * 2f
         color = 0xFFFFFFFF.toInt()
     }
 
@@ -241,8 +262,7 @@ class Workspace @JvmOverloads constructor(
             val (view, item) = iterator.next()
             if (item.id !in wanted) {
                 iterator.remove()
-                removeView(view)
-                itemRecycler?.invoke(view, item)
+                discard(view, item)
             }
         }
 
@@ -264,6 +284,22 @@ class Workspace @JvmOverloads constructor(
         if (selectedItemId != null && items.none { it.id == selectedItemId }) selectedItemId = null
         requestLayout()
         invalidate()
+    }
+
+    /**
+     * Takes a discarded item view off the home for good.
+     *
+     * The wobble must be stopped while the view is still attached. A view removed with an
+     * animation still running is not detached by the framework: it is parked in this parent's
+     * disappearing-children list and drawn there every frame, and an infinite wobble never ends,
+     * so nothing would ever take it out again. That left a frozen, untouchable copy of every
+     * widget removed in edit mode sitting on the home until the activity was recreated.
+     */
+    private fun discard(view: View, item: HomeItem) {
+        Jiggle.stop(view)
+        view.animate().cancel()
+        removeView(view)
+        itemRecycler?.invoke(view, item)
     }
 
     /** The currently settled page. */
@@ -378,10 +414,17 @@ class Workspace @JvmOverloads constructor(
                 settleAfterAnimation = !scroller.isFinished
                 scroller.abortAnimation()
                 beginTrackingVelocity(ev)
-                // A handle wins over the item under it: that gesture resizes rather than pages.
+                // The delete badge and the handles win over the item under them: those gestures
+                // remove and resize rather than page. The badge is asked first, since it sits on
+                // top of the item's own edge.
                 if (editing) {
                     val item = selectedItem()
                     if (item != null) {
+                        if (badgeAt(item, ev.x, ev.y)) {
+                            badgeArmed = true
+                            invalidate()
+                            return true
+                        }
                         val corner = handleAt(item, ev.x, ev.y)
                         if (corner != CORNER_NONE && beginResize(item, corner)) return true
                     }
@@ -416,6 +459,9 @@ class Workspace @JvmOverloads constructor(
                 beginTrackingVelocity(event)
                 // A resize was started from [onInterceptTouchEvent]; it owns the whole gesture.
                 if (resizing) return true
+                // The badge owns its gesture too: no long press, so a press there cannot start a
+                // drag that would move the item the badge belongs to.
+                if (badgeArmed) return true
                 postDelayed(longPressRunnable, longPressTimeout)
                 return true
             }
@@ -424,6 +470,8 @@ class Workspace @JvmOverloads constructor(
                     updateResize(event.x, event.y)
                     return true
                 }
+                // A press that began on the badge is a tap or nothing: it never pages.
+                if (badgeArmed) return true
                 if (pageDragging) {
                     updatePageDrag(event.x)
                     return true
@@ -443,6 +491,17 @@ class Workspace @JvmOverloads constructor(
                 removeCallbacks(longPressRunnable)
                 if (resizing) {
                     finishResize(event.actionMasked == MotionEvent.ACTION_UP)
+                    return true
+                }
+                if (badgeArmed) {
+                    val tapped = event.actionMasked == MotionEvent.ACTION_UP
+                    badgeArmed = false
+                    invalidate()
+                    // Releasing anywhere but on the badge is a change of mind, not a tap.
+                    val item = selectedItem()
+                    if (tapped && item != null && badgeAt(item, event.x, event.y)) {
+                        onItemRemoveRequested?.invoke(item)
+                    }
                     return true
                 }
                 if (pageDragging) {
@@ -573,6 +632,27 @@ class Workspace @JvmOverloads constructor(
     private fun handleTouchPx(bounds: Rect): Int =
         minOf(dp(HANDLE_TOUCH_DP), bounds.width() / 4, bounds.height() / 4)
             .coerceAtLeast(dp(MIN_HANDLE_TOUCH_DP))
+
+    /**
+     * Whether a view-local touch landed on the delete badge of [item]. The badge is a disc
+     * centred on the item's top edge, just inside the selection frame, so it stays clear of the
+     * corner handles — which is also why its grab box is capped at a third of the placement.
+     */
+    private fun badgeAt(item: HomeItem, localX: Float, localY: Float): Boolean {
+        val bounds = selectionBounds
+        itemBounds(item, bounds)
+        if (bounds.width() <= 0 || bounds.height() <= 0) return false
+        val half = badgeTouchPx(bounds) / 2
+        val centerY = badgeCenterY(bounds)
+        return abs(localX + scrollX - bounds.centerX()) <= half && abs(localY - centerY) <= half
+    }
+
+    /** Side of the badge's grab box, and where its centre sits inside the placement. */
+    private fun badgeTouchPx(bounds: Rect): Int =
+        minOf(dp(BADGE_TOUCH_DP), bounds.width() / 3, bounds.height() / 3)
+            .coerceAtLeast(dp(MIN_BADGE_TOUCH_DP))
+
+    private fun badgeCenterY(bounds: Rect): Int = bounds.top + dp(HANDLE_INSET_DP) + badgeTouchPx(bounds) / 2
 
     private fun beginResize(item: HomeItem, corner: Int): Boolean {
         val limits = resizeBounds?.invoke(item) ?: return false
@@ -962,6 +1042,21 @@ class Workspace @JvmOverloads constructor(
         drawHandle(canvas, right, top)
         drawHandle(canvas, left, bottom)
         drawHandle(canvas, right, bottom)
+        drawBadge(canvas, bounds)
+    }
+
+    /**
+     * The delete badge on the selected item: the way to remove it without aiming a drag at the
+     * Remove target. It grows a little while pressed, so the tap has visible feedback.
+     */
+    private fun drawBadge(canvas: Canvas, bounds: Rect) {
+        val centerX = bounds.centerX().toFloat()
+        val centerY = badgeCenterY(bounds).toFloat()
+        val radius = (dp(BADGE_DOT_DP) / 2f) * if (badgeArmed) 1.15f else 1f
+        canvas.drawCircle(centerX, centerY, radius, badgePaint)
+        val arm = radius * 0.38f
+        canvas.drawLine(centerX - arm, centerY - arm, centerX + arm, centerY + arm, badgeCrossPaint)
+        canvas.drawLine(centerX + arm, centerY - arm, centerX - arm, centerY + arm, badgeCrossPaint)
     }
 
     private fun drawHandle(canvas: Canvas, centerX: Int, centerY: Int) {
@@ -1004,5 +1099,10 @@ class Workspace @JvmOverloads constructor(
         const val HANDLE_DOT_DP = 16
         const val HANDLE_RADIUS_DP = 4
         const val SELECTION_RADIUS_DP = 12
+
+        /** The delete badge's grab box, its least size, and the disc drawn inside it. */
+        const val BADGE_TOUCH_DP = 44
+        const val MIN_BADGE_TOUCH_DP = 28
+        const val BADGE_DOT_DP = 24
     }
 }

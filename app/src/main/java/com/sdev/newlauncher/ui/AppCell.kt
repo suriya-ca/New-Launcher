@@ -32,6 +32,7 @@ internal object AppCell {
         val icon = itemView.findViewById<ImageView>(R.id.app_icon)
         val label = itemView.findViewById<TextView>(R.id.app_label)
 
+        icon?.setImageDrawable(null)
         icon?.setImageDrawable(IconRenderer.icon(itemView.context, app, scope))
         label?.text = app.label
         label?.visibility = if (showLabels) View.VISIBLE else View.GONE

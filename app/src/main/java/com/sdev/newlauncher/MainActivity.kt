@@ -488,7 +488,9 @@ class MainActivity : AppCompatActivity() {
         // Icon shape and pack decide how every icon is drawn: a change to either has to empty the
         // renderer's cache, and the pack's parsed filter is rebuilt through the repository.
         val signature = prefs.getIconShape().name + "|" + prefs.getIconShapeScalePercent() + "|" +
-            prefs.getIconShapeCornerPercent() + "|" + prefs.getIconPack()
+            prefs.getIconShapeCornerPercent() + "|" + prefs.getIconPack() + "|" +
+            prefs.isShapeAppliedTo(IconScope.HOME) + "|" + prefs.isShapeAppliedTo(IconScope.DOCK) +
+            "|" + prefs.isShapeAppliedTo(IconScope.DRAWER) + "|" + prefs.isShapeAppliedTo(IconScope.FOLDER)
         if (signature != iconSignature) {
             iconSignature = signature
             IconRenderer.clearCache()
@@ -515,8 +517,9 @@ class MainActivity : AppCompatActivity() {
         if (::listDrawerAdapter.isInitialized) listDrawerAdapter.notifyDataSetChanged()
         if (::sectionedAdapter.isInitialized) sectionedAdapter.notifyDataSetChanged()
         if (::orderAdapter.isInitialized) orderAdapter.notifyDataSetChanged()
+        if (::dockAdapter.isInitialized) dockAdapter.notifyDataSetChanged()
+        if (::binding.isInitialized) binding.workspace.submit(prefs.getHomeItems().filter { !it.isApp || appFor(it) != null })
     }
-
     /**
      * Turns the real wallpaper blur on behind whichever surface is on screen, and off when none of
      * them is.
@@ -561,9 +564,13 @@ class MainActivity : AppCompatActivity() {
         lp.flags = flags
         lp.blurBehindRadius = radius
         target.attributes = lp
+        // Window-level background blur is what actually repaints the wallpaper.
+        target.setBackgroundBlurRadius(radius)
     }
 
     private fun drawerBackgroundAlpha(): Int = (prefs.getDrawerOpacity() * 255).toInt().coerceIn(0, 255)
+
+    private fun drawerScrimColor(): Int = Color.argb(drawerBackgroundAlpha(), 0x0D, 0x10, 0x16)
 
     /**
      * Handles a downward swipe. Over the drawer or the widget sheet it dismisses them, as it always
@@ -2376,8 +2383,8 @@ class MainActivity : AppCompatActivity() {
             return
         }
         tabs.visibility = View.VISIBLE
-
-        // Sit above the search field or below it: the two are the only views in this column.
+        tabs.setBackgroundColor(drawerScrimColor())
+        tabs.tabGravity = TabLayout.GRAVITY_START
         (tabs.parent as? LinearLayout)?.let { column ->
             val index = if (prefs.getDrawerTabPosition() == DrawerTabPosition.ABOVE_SEARCH) 0 else 1
             if (column.indexOfChild(tabs) != index) {
@@ -2885,7 +2892,7 @@ class MainActivity : AppCompatActivity() {
         const val MENU_FOLDER_ADD = 12
 
         /** The translucency of a folder's own backdrop, over the wallpaper. */
-        const val FOLDER_BACKDROP_COLOR = 0x40FFFFFF
+        const val FOLDER_BACKDROP_COLOR = 0x70FFFFFF
 
         /** The tab id standing for the hidden-apps tab; `null` is the "All" tab. */
         const val HIDDEN_TAB = "hidden"

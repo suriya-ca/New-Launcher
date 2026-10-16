@@ -452,6 +452,23 @@ class Workspace @JvmOverloads constructor(
     /** Whether the page overview is on screen, open on its own rather than under a finger. */
     fun isOverviewOpen(): Boolean = overviewOpen
 
+    /**
+     * True when a touch at the given view-local point lands on a home item. The page overview
+     * answers false: it is a place to point at pages, not at icons. Used to tell a swipe down
+     * that began on an icon from one that began on empty space.
+     */
+    fun hitsItem(viewX: Float, viewY: Float): Boolean {
+        if (pageOverview < 1f || width <= 0 || height <= 0) return false
+        val x = (viewX + scrollX).toInt()
+        val y = viewY.toInt()
+        val bounds = Rect()
+        for ((_, item) in entries) {
+            itemBounds(item, bounds)
+            if (bounds.contains(x, y)) return true
+        }
+        return false
+    }
+
     /** Animates to [page]. */
     fun goToPage(page: Int) {
         val width = width

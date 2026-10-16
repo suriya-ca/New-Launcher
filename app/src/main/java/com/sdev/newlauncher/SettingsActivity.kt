@@ -3,6 +3,7 @@ package com.sdev.newlauncher
 import android.content.Intent
 import android.os.Bundle
 import com.sdev.newlauncher.data.DrawerLayoutMode
+import com.sdev.newlauncher.data.SwipeDownAction
 import com.sdev.newlauncher.databinding.ActivitySettingsBinding
 
 /**
@@ -27,6 +28,9 @@ class SettingsActivity : BaseSettingsActivity() {
         binding.rowHome.setOnClickListener { open(HomeSettingsActivity::class.java) }
         binding.rowDrawer.setOnClickListener { open(DrawerSettingsActivity::class.java) }
         binding.rowIcons.setOnClickListener { open(IconsSettingsActivity::class.java) }
+        binding.rowFolders.setOnClickListener { open(FoldersSettingsActivity::class.java) }
+        binding.rowGestures.setOnClickListener { open(GesturesSettingsActivity::class.java) }
+        binding.rowBlur.setOnClickListener { open(BlurSettingsActivity::class.java) }
         binding.rowDock.setOnClickListener { open(DockSettingsActivity::class.java) }
         binding.rowHidden.setOnClickListener { open(HiddenAppsActivity::class.java) }
         binding.rowSystem.setOnClickListener { open(SystemSettingsActivity::class.java) }
@@ -50,6 +54,35 @@ class SettingsActivity : BaseSettingsActivity() {
 
         binding.iconsSummary.text =
             getString(R.string.settings_dp_value, prefs.getIconSizeDp())
+
+        binding.foldersSummary.text = if (!prefs.areFoldersEnabled()) {
+            getString(R.string.settings_disabled_value)
+        } else {
+            getString(R.string.settings_folders_count_value, prefs.getFolders().size + prefs.getDrawerFolderCount())
+        }
+
+        binding.gesturesSummary.text = if (!prefs.isSwipeDownEnabled()) {
+            getString(R.string.settings_disabled_value)
+        } else {
+            getString(
+                R.string.gestures_hub_summary,
+                getString(
+                    if (prefs.getSwipeDownAction() == SwipeDownAction.QUICK_SETTINGS) {
+                        R.string.settings_swipe_quick_settings
+                    } else {
+                        R.string.settings_swipe_notifications
+                    }
+                )
+            )
+        }
+
+        binding.blurSummary.text = getString(
+            R.string.settings_blur_hub_summary,
+            getString(
+                if (prefs.isBlurEnabled()) R.string.settings_enabled_value
+                else R.string.settings_disabled_value
+            )
+        )
 
         binding.dockSummary.text =
             getString(R.string.settings_icons_value, prefs.getDockCapacity())

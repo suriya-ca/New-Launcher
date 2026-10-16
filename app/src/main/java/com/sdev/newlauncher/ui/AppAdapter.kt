@@ -9,6 +9,7 @@ import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.sdev.newlauncher.R
 import com.sdev.newlauncher.data.AppInfo
+import com.sdev.newlauncher.data.IconScope
 
 /**
  * RecyclerView adapter rendering an app as an icon (+ optional label) cell.
@@ -55,6 +56,9 @@ class AppAdapter(
             }
         }
 
+    /** The surface these cells are drawn on, which decides shape and icon-pack application. */
+    var iconScope: IconScope = IconScope.HOME
+
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): AppViewHolder {
         val view = LayoutInflater.from(parent.context).inflate(itemLayoutRes, parent, false)
         return AppViewHolder(view)
@@ -74,7 +78,8 @@ class AppAdapter(
                 cellWidthPx,
                 onAppClick,
                 onAppLongClick,
-                onAppDragStart
+                onAppDragStart,
+                iconScope
             )
         }
     }

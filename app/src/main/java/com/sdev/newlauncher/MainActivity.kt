@@ -1,6 +1,7 @@
 package com.sdev.newlauncher
 
 import android.app.Activity
+import android.app.Dialog
 import android.appwidget.AppWidgetHostView
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProviderInfo
@@ -8,8 +9,15 @@ import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.graphics.Color
 import android.graphics.Rect
+import android.graphics.drawable.ColorDrawable
+import android.graphics.drawable.Drawable
+import android.graphics.drawable.GradientDrawable
+import android.os.Build
 import android.os.Bundle
+import android.os.VibrationEffect
+import android.os.Vibrator
 import android.text.Editable
 import android.text.TextWatcher
 import android.util.SizeF
@@ -18,10 +26,15 @@ import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
+import android.view.Window
+import android.view.WindowManager
 import android.view.animation.DecelerateInterpolator
 import android.view.inputmethod.InputMethodManager
+import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.Space
 import android.widget.TextView
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
@@ -39,13 +52,26 @@ import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager2.widget.ViewPager2
+import com.google.android.material.tabs.TabLayout
 import com.sdev.newlauncher.data.AppInfo
 import com.sdev.newlauncher.data.AppRepository
+import com.sdev.newlauncher.data.BlurTarget
+import com.sdev.newlauncher.data.DrawerCategory
+import com.sdev.newlauncher.data.DrawerFolder
 import com.sdev.newlauncher.data.DrawerLayoutMode
+import com.sdev.newlauncher.data.DrawerTabPosition
+import com.sdev.newlauncher.data.FolderBackground
+import com.sdev.newlauncher.data.FolderOpenStyle
+import com.sdev.newlauncher.data.FolderPreview
 import com.sdev.newlauncher.data.HomeGeometry
 import com.sdev.newlauncher.data.HomeItem
+import com.sdev.newlauncher.data.IconPackRepository
+import com.sdev.newlauncher.data.IconScope
+import com.sdev.newlauncher.data.IconShape
 import com.sdev.newlauncher.data.LauncherAppWidgetHost
+import com.sdev.newlauncher.data.LauncherFolder
 import com.sdev.newlauncher.data.LauncherPrefs
+import com.sdev.newlauncher.data.SwipeDownAction
 import com.sdev.newlauncher.data.PackageChangeReceiver
 import com.sdev.newlauncher.data.WidgetProviderItem
 import com.sdev.newlauncher.data.WidgetRepository
@@ -56,6 +82,8 @@ import com.sdev.newlauncher.ui.AppCell
 import com.sdev.newlauncher.ui.DrawerPagerAdapter
 import com.sdev.newlauncher.ui.DrawerRow
 import com.sdev.newlauncher.ui.GridSpacingItemDecoration
+import com.sdev.newlauncher.ui.IconRenderer
+import com.sdev.newlauncher.ui.MaskedIconDrawable
 import com.sdev.newlauncher.ui.OrderableAppAdapter
 import com.sdev.newlauncher.ui.SectionedAppAdapter
 import com.sdev.newlauncher.ui.StickyHeaderDecoration
@@ -167,6 +195,21 @@ class MainActivity : AppCompatActivity() {
     private var labels = true
     private var iconPx = 0
 
+    /**
+     * The drawer's selected category tab: `null` is "All", [HIDDEN_TAB] is the hidden-apps tab,
+     * anything else is the id of a [DrawerCategory].
+     */
+    private var selectedTabId: String? = null
+
+    /** The icon settings the renderer cache was filled from, so it is only dropped when they move. */
+    private var iconSignature = ""
+
+    /** Whether the platform supports blurring what is behind a window on this device. */
+    private var windowBlurSupported = false
+
+    /** True while the drawer tabs are being rebuilt, so their own callbacks are ignored. */
+    private var updatingTabs = false
+
     private val packageReceiver = PackageChangeReceiver { reloadApps() }
 
     // Widget binding: the system shows its own consent / configure screens, then calls back here.
@@ -198,6 +241,8 @@ class MainActivity : AppCompatActivity() {
         prefs = LauncherPrefs(this)
         appWidgetHost = LauncherAppWidgetHost(this)
         appWidgetManager = AppWidgetManager.getInstance(this)
+        windowBlurSupported =
+            isWindowBlurSupportedByDevice()
 
         setupSystemBars()
         setupWorkspace()
@@ -205,6 +250,17 @@ class MainActivity : AppCompatActivity() {
         setupInteractions()
 
         reloadApps()
+    }
+
+    private fun isWindowBlurSupportedByDevice(): Boolean {
+        if (Build.VERSION.SDK_INT < 31) return false
+        return try {
+            val wm = getSystemService(WindowManager::class.java) ?: return false
+            val method = wm.javaClass.getMethod("isWindowBlurSupported")
+            method.invoke(wm) as? Boolean ?: true
+        } catch (_: Throwable) {
+            true
+        }
     }
 
     override fun onStart() {
@@ -273,30 +329,33 @@ class MainActivity : AppCompatActivity() {
     /** Wires the paged home surface to the app data and the edit-mode callbacks. */
     private fun setupWorkspace() {
         binding.workspace.itemViewFactory = { item ->
-            if (item.isWidget) {
-                createWidgetCell(item)
-            } else {
-                LayoutInflater.from(this).inflate(R.layout.item_app, binding.workspace, false)
+            when {
+                item.isWidget -> createWidgetCell(item)
+                item.isFolder -> LayoutInflater.from(this).inflate(R.layout.item_folder, binding.workspace, false)
+                else -> LayoutInflater.from(this).inflate(R.layout.item_app, binding.workspace, false)
             }
         }
         binding.workspace.itemBinder = { view, item ->
-            if (item.isWidget) {
-                bindWidgetCell(view, item)
-            } else {
-                val app = appFor(item)
-                if (app == null) {
-                    view.visibility = View.INVISIBLE
-                } else {
-                    view.visibility = View.VISIBLE
-                    AppCell.bind(
-                        view,
-                        app,
-                        labels,
-                        iconPx,
-                        0,
-                        { tapped -> if (editMode) showAppMenu(tapped, view) else launchApp(tapped) },
-                        { _, anchor -> onHomeItemLongClick(item, anchor) }
-                    )
+            when {
+                item.isWidget -> bindWidgetCell(view, item)
+                item.isFolder -> bindFolderCell(view, item)
+                else -> {
+                    val app = appFor(item)
+                    if (app == null) {
+                        view.visibility = View.INVISIBLE
+                    } else {
+                        view.visibility = View.VISIBLE
+                        AppCell.bind(
+                            view,
+                            app,
+                            labels,
+                            iconPx,
+                            0,
+                            { tapped -> if (editMode) showAppMenu(tapped, view) else launchApp(tapped) },
+                            { _, anchor -> onHomeItemLongClick(item, anchor) },
+                            scope = IconScope.HOME
+                        )
+                    }
                 }
             }
         }
@@ -350,28 +409,28 @@ class MainActivity : AppCompatActivity() {
             itemLayoutRes = R.layout.item_app_dock,
             onAppClick = ::launchApp,
             onAppLongClick = ::showAppMenu
-        )
+        ).apply { iconScope = IconScope.DOCK }
         gridDrawerAdapter = AppAdapter(
             onAppClick = ::launchApp,
             onAppLongClick = ::showAppMenu,
             onAppDragStart = ::startDrawerDrag
-        )
+        ).apply { iconScope = IconScope.DRAWER }
         listDrawerAdapter = AppAdapter(
             itemLayoutRes = R.layout.item_app_list,
             onAppClick = ::launchApp,
             onAppLongClick = ::showAppMenu,
             onAppDragStart = ::startDrawerDrag
-        )
+        ).apply { iconScope = IconScope.DRAWER }
         sectionedAdapter = SectionedAppAdapter(
             onAppClick = ::launchApp,
             onAppLongClick = ::showAppMenu,
             onAppDragStart = ::startDrawerDrag
-        )
+        ).apply { iconScope = IconScope.DRAWER }
         orderAdapter = OrderableAppAdapter(
             onAppClick = ::launchApp,
             onAppLongClick = ::showAppMenu,
             onAppDragStart = ::startDrawerDrag
-        )
+        ).apply { iconScope = IconScope.DRAWER }
         stickyHeaderDecoration = StickyHeaderDecoration(sectionedAdapter)
 
         binding.dockGrid.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
@@ -426,10 +485,148 @@ class MainActivity : AppCompatActivity() {
         binding.appsButton.visibility = if (prefs.getShowAppsButton()) View.VISIBLE else View.GONE
         updateDockCellWidth(binding.dockAppsArea.width)
 
-        val alpha = (prefs.getDrawerOpacity() * 255).toInt().coerceIn(0, 255)
-        binding.drawerContainer.background?.mutate()?.alpha = alpha
+        // Icon shape and pack decide how every icon is drawn: a change to either has to empty the
+        // renderer's cache, and the pack's parsed filter is rebuilt through the repository.
+        val signature = prefs.getIconShape().name + "|" + prefs.getIconShapeScalePercent() + "|" +
+            prefs.getIconShapeCornerPercent() + "|" + prefs.getIconPack()
+        if (signature != iconSignature) {
+            iconSignature = signature
+            IconRenderer.clearCache()
+            IconPackRepository.clearCache()
+            rebindIcons()
+        }
 
         prefs.trimDockToCapacity()
+
+        updateBlur()
+    }
+
+    /**
+     * The drawer and dock adapters are list adapters: handing them the same apps again is a no-op
+     * for DiffUtil, so a change that only affects how an icon is drawn — its shape, or the icon
+     * pack it comes from — would never reach the cells already on screen. Emptying the renderer's
+     * cache is not enough on its own, so every visible row is rebound here, and the paged drawer's
+     * adapter is dropped so its nested adapters are rebuilt around fresh icons too.
+     */
+    private fun rebindIcons() {
+        pagerAdapter = null
+        if (::dockAdapter.isInitialized) dockAdapter.notifyDataSetChanged()
+        if (::gridDrawerAdapter.isInitialized) gridDrawerAdapter.notifyDataSetChanged()
+        if (::listDrawerAdapter.isInitialized) listDrawerAdapter.notifyDataSetChanged()
+        if (::sectionedAdapter.isInitialized) sectionedAdapter.notifyDataSetChanged()
+        if (::orderAdapter.isInitialized) orderAdapter.notifyDataSetChanged()
+    }
+
+    /**
+     * Turns the real wallpaper blur on behind whichever surface is on screen, and off when none of
+     * them is.
+     *
+     * The blur is the window's own `blurBehindRadius`, not a bitmap copy of the wallpaper: from
+     * Android 14 an app can no longer read the wallpaper image at all (WallpaperManager throws),
+     * and a window blur is what the platform provides instead — it blurs whatever is genuinely
+     * behind the window, which for a translucent home app is the wallpaper. The drawer keeps its
+     * own background at the user's opacity, so the slider still decides how much of the blurred
+     * wallpaper shows through it.
+     */
+    private fun updateBlur() {
+        val blurOn = prefs.isBlurEnabled()
+        val drawerBlur = blurOn && drawerOpen && prefs.isBlurTargetEnabled(BlurTarget.DRAWER)
+        val sheetBlur = blurOn && widgetSheetOpen && prefs.isBlurTargetEnabled(BlurTarget.SHEETS)
+        val overviewBlur = blurOn && binding.workspace.isOverviewOpen() &&
+            prefs.isBlurTargetEnabled(BlurTarget.OVERVIEW)
+
+        binding.drawerContainer.background?.mutate()?.alpha = drawerBackgroundAlpha()
+
+        setWindowBlur(
+            window,
+            if (drawerBlur || sheetBlur || overviewBlur) prefs.getBlurRadiusDp() else 0
+        )
+    }
+
+    /**
+     * Applies (or clears) the platform's blur-behind on [target]. Does nothing when the device or
+     * the user has window blurs switched off, in which case the surfaces keep their plain scrim.
+     */
+    private fun setWindowBlur(target: Window, radiusDp: Int) {
+        if (!windowBlurSupported) return
+        val lp = target.attributes
+        val wantBlur = radiusDp > 0
+        val flags = if (wantBlur) {
+            lp.flags or WindowManager.LayoutParams.FLAG_BLUR_BEHIND
+        } else {
+            lp.flags and WindowManager.LayoutParams.FLAG_BLUR_BEHIND.inv()
+        }
+        val radius = if (wantBlur) dp(radiusDp) else 0
+        if (lp.flags == flags && lp.blurBehindRadius == radius) return
+        lp.flags = flags
+        lp.blurBehindRadius = radius
+        target.attributes = lp
+    }
+
+    private fun drawerBackgroundAlpha(): Int = (prefs.getDrawerOpacity() * 255).toInt().coerceIn(0, 255)
+
+    /**
+     * Handles a downward swipe. Over the drawer or the widget sheet it dismisses them, as it always
+     * has; on empty home space it opens the panel the gesture setting names. Over an icon, in edit
+     * mode or in the page overview it does nothing, so those gestures keep their own meaning.
+     */
+    private fun onSwipeDown(startX: Float, startY: Float) {
+        when {
+            widgetSheetOpen -> closeWidgetSheet()
+            drawerOpen -> if (canDismissWithSwipe()) closeDrawer()
+            editMode || binding.workspace.isOverviewOpen() -> Unit
+            !prefs.isSwipeDownEnabled() -> Unit
+            prefs.isSwipeDownEmptySpaceOnly() && workspaceHitsItem(startX, startY) -> Unit
+            else -> {
+                openSystemPanel(prefs.getSwipeDownAction())
+                if (prefs.isHapticsEnabled()) vibrate()
+            }
+        }
+    }
+
+    /** True when a touch at the given root-window point lands on a home item. */
+    private fun workspaceHitsItem(rootX: Float, rootY: Float): Boolean {
+        val root = IntArray(2)
+        val workspace = IntArray(2)
+        binding.root.getLocationOnScreen(root)
+        binding.workspace.getLocationOnScreen(workspace)
+        return binding.workspace.hitsItem(
+            rootX + root[0] - workspace[0],
+            rootY + root[1] - workspace[1]
+        )
+    }
+
+    /**
+     * Asks the system's status bar to open a panel. There is no public API for this — the shade
+     * belongs to SystemUI — so the hidden `StatusBarManager` methods are tried by reflection. A
+     * build that refuses them leaves the swipe doing nothing rather than crashing.
+     */
+    private fun openSystemPanel(action: SwipeDownAction): Boolean {
+        val service = getSystemService(Context.STATUS_BAR_SERVICE) ?: return false
+        val candidates: List<Pair<String, Array<Class<*>>>> =
+            if (action == SwipeDownAction.QUICK_SETTINGS) {
+                listOf(
+                    "expandSettingsPanel" to arrayOf(),
+                    "expandSettingsPanel" to arrayOf(String::class.java)
+                )
+            } else {
+                listOf("expandNotificationsPanel" to arrayOf())
+            }
+        for ((name, types) in candidates) {
+            try {
+                val method = service.javaClass.getMethod(name, *types)
+                method.invoke(service, *Array(types.size) { null })
+                return true
+            } catch (_: Throwable) {
+                // Try the next overload, or give up: the gesture is optional.
+            }
+        }
+        return false
+    }
+
+    private fun vibrate() {
+        val vibrator = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? Vibrator ?: return
+        vibrator.vibrate(VibrationEffect.createOneShot(GESTURE_HAPTIC_MS, VibrationEffect.DEFAULT_AMPLITUDE))
     }
 
     /**
@@ -448,12 +645,6 @@ class MainActivity : AppCompatActivity() {
     private fun setupInteractions() {
         binding.appsButton.setOnClickListener { openDrawer() }
         binding.root.onSwipeUp = { if (!widgetSheetOpen) openDrawer() }
-        binding.root.onSwipeDown = {
-            when {
-                widgetSheetOpen -> closeWidgetSheet()
-                drawerOpen && canDismissWithSwipe() -> closeDrawer()
-            }
-        }
 
         binding.editWallpaper.setOnClickListener { openWallpaper() }
         binding.editWidgets.setOnClickListener { openWidgetSheet(null) }
@@ -477,6 +668,16 @@ class MainActivity : AppCompatActivity() {
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
             override fun afterTextChanged(s: Editable?) = renderDrawer()
         })
+
+        binding.drawerTabs.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
+            override fun onTabSelected(tab: TabLayout.Tab) = onDrawerTabSelected(tab)
+            override fun onTabUnselected(tab: TabLayout.Tab) = Unit
+            override fun onTabReselected(tab: TabLayout.Tab) = Unit
+        })
+
+        // A swipe down on the empty home screen opens the chosen panel; elsewhere it dismisses
+        // whatever is open, which is what the gesture has always done.
+        binding.root.onSwipeDown = { x, y -> onSwipeDown(x, y) }
 
         // Back never finishes the activity: it dismisses what is open, innermost first.
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
@@ -515,7 +716,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun refreshHomeAndDock() {
         refitWidgetSpans()
-        val items = prefs.getHomeItems().filter { it.isWidget || appFor(it) != null }
+        // A folder is a placement too: it survives even though no installed app answers to it.
+        prefs.pruneFolders()
+        val items = prefs.getHomeItems().filter { !it.isApp || appFor(it) != null }
         val highestPage = items.maxOfOrNull { it.page } ?: 0
         val pages = maxOf(prefs.getHomePageCount(), highestPage + 1)
         // The stored count is the user's own: a page they added stays until they delete it.
@@ -563,6 +766,7 @@ class MainActivity : AppCompatActivity() {
     private fun onOverviewChanged(open: Boolean) {
         overviewShowing = open
         buildPageStrip(prefs.getHomePageCount())
+        updateBlur()
     }
 
     private fun pageDot(): ImageView {
@@ -717,12 +921,14 @@ class MainActivity : AppCompatActivity() {
     private fun onHomeItemLongClick(item: HomeItem, anchor: View) {
         if (editMode) {
             binding.workspace.startItemDrag(item, anchor)
+        } else if (item.isFolder) {
+            showFolderMenu(item, anchor)
         } else {
             appFor(item)?.let { showAppMenu(it, anchor) }
         }
     }
 
-    /** Applies a completed drag: exact placement, swap, or the nearest free cell. */
+    /** Applies a completed drag: exact placement, swap, folder creation, or the nearest free cell. */
     private fun onHomeItemDropped(id: String, page: Int, row: Int, col: Int) {
         // A widget lifted out of the picker is not on the home screen yet: it is being placed. The
         // grid reaches up under the sheet, so a long press released without pulling the card clear
@@ -744,6 +950,17 @@ class MainActivity : AppCompatActivity() {
         val target = moving.copy(page = page, row = row, col = col)
         val columns = binding.workspace.columns
         val rows = binding.workspace.rows
+
+        // Dropping an app onto another app makes a folder; onto a folder it joins it.
+        val app = if (moving.isApp) appFor(moving) else null
+        if (app != null && prefs.areFoldersEnabled()) {
+            val occupant = items.firstOrNull { it.id != id && it.overlaps(target) }
+            if (occupant != null && occupant.isApp && occupant.packageName != moving.packageName) {
+                if (createFolder(occupant, app, items)) return
+            } else if (occupant != null && occupant.isFolder) {
+                if (addToFolderAt(target, app, items)) return
+            }
+        }
 
         if (HomeGeometry.fits(items, target, columns, rows)) {
             items[index] = target
@@ -786,8 +1003,366 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun removeHomeItem(item: HomeItem) {
+        if (item.isFolder) {
+            deleteFolder(item.folderId)
+            return
+        }
         prefs.removeHomeItem(item.id)
         refreshHomeAndDock()
+    }
+
+    // ---------------------------------------------------------------- folders
+
+    /** Resolves a folder child's `package/activity` key to a live app, or null once it is gone. */
+    private fun appByKey(key: String): AppInfo? {
+        val packageName = key.substringBefore('/')
+        val activityName = key.substringAfter('/', "")
+        return allApps.firstOrNull {
+            it.packageName == packageName && (activityName.isEmpty() || it.activityName == activityName)
+        }
+    }
+
+    /** Draws a folder's cell: its backdrop, a preview of the apps inside and its name. */
+    private fun bindFolderCell(view: View, item: HomeItem) {
+        val folder = prefs.folderById(item.folderId)
+        val background = view.findViewById<View>(R.id.folder_background)
+        val grid = view.findViewById<LinearLayout>(R.id.folder_grid)
+        val label = view.findViewById<TextView>(R.id.folder_label)
+
+        // Rebound views keep the lift dimming the drag left on them.
+        view.alpha = 1f
+        background.background = folderBackdrop()
+        label.text = folder?.name.orEmpty()
+        label.visibility = if (prefs.showFolderLabels()) View.VISIBLE else View.GONE
+
+        val preview = prefs.getFolderPreview()
+        val perRow = if (preview == FolderPreview.GRID_3X3) 3 else 2
+        val cellWidth = (binding.workspace.width / binding.workspace.columns.coerceAtLeast(1)).coerceAtLeast(dp(48))
+        val miniPx = (cellWidth * if (perRow == 3) 0.24f else 0.36f).toInt().coerceAtLeast(dp(12))
+        val marginPx = dp(2)
+
+        val apps = (folder?.children ?: emptyList())
+            .mapNotNull { appByKey(it) }
+            .take(perRow * perRow)
+
+        grid.removeAllViews()
+        grid.visibility = if (apps.isEmpty()) View.GONE else View.VISIBLE
+        for (chunk in apps.chunked(perRow)) {
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER
+            }
+            for (app in chunk) {
+                val icon = ImageView(this).apply {
+                    setImageDrawable(IconRenderer.icon(this@MainActivity, app, IconScope.FOLDER))
+                    scaleType = ImageView.ScaleType.FIT_CENTER
+                }
+                val params = LinearLayout.LayoutParams(miniPx, miniPx)
+                params.setMargins(marginPx, marginPx, marginPx, marginPx)
+                row.addView(icon, params)
+            }
+            grid.addView(row)
+        }
+
+        view.setOnClickListener { if (editMode) showFolderMenu(item, view) else openFolder(item) }
+        view.setOnLongClickListener {
+            onHomeItemLongClick(item, view)
+            true
+        }
+    }
+
+    /**
+     * The backdrop behind a folder's preview: the folder's own choice, or — on "match icon shape" —
+     * the icon shape itself, so a folder always looks like the icons it sits among.
+     */
+    private fun folderBackdrop(): Drawable {
+        val color = ColorDrawable(FOLDER_BACKDROP_COLOR)
+        val shapeKind = when (prefs.getFolderBackground()) {
+            FolderBackground.CIRCLE -> IconShape.CIRCLE
+            FolderBackground.SQUARE -> IconShape.NONE
+            FolderBackground.ROUNDED -> IconShape.ROUNDED
+            FolderBackground.AUTO -> when (prefs.getIconShape()) {
+                IconShape.NONE -> IconShape.ROUNDED
+                else -> prefs.getIconShape()
+            }
+        }
+        if (shapeKind == IconShape.NONE) {
+            return GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dp(8).toFloat()
+                setColor(FOLDER_BACKDROP_COLOR)
+            }
+        }
+        return MaskedIconDrawable(color, shapeKind, prefs.getIconShapeCornerPercent(), 1f)
+    }
+
+    private fun openFolder(item: HomeItem) {
+        val folder = prefs.folderById(item.folderId) ?: return
+        showFolderSheet(folder)
+    }
+
+    /** Shows a folder's contents; the presentation follows the folder open-style setting. */
+    private fun showFolderSheet(folder: LauncherFolder) {
+        val sheet = layoutInflater.inflate(R.layout.sheet_folder, null)
+        val dialog = Dialog(this)
+        val sheetStyle = prefs.getFolderOpenStyle() == FolderOpenStyle.SHEET
+        // The dialog is a window of its own, so it carries the blur: it blurs the home screen
+        // behind it, which the activity's own window cannot do for it.
+        val blurred = prefs.isBlurEnabled() && prefs.isBlurTargetEnabled(BlurTarget.SHEETS)
+
+        if (blurred) {
+            // A full-screen transparent window: the blur and the scrim fill it, the sheet sits
+            // inside it. Tapping the scrim is what dismisses, since the sheet no longer owns the
+            // whole window and a touch outside it would otherwise be swallowed.
+            val container = FrameLayout(this)
+            val scrim = View(this).apply {
+                setBackgroundColor(SHEET_SCRIM_COLOR)
+                setOnClickListener { dialog.dismiss() }
+            }
+            container.addView(
+                scrim,
+                FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT
+                )
+            )
+            val sheetParams = FrameLayout.LayoutParams(
+                if (sheetStyle) FrameLayout.LayoutParams.MATCH_PARENT
+                else (resources.displayMetrics.widthPixels * 0.92f).toInt(),
+                FrameLayout.LayoutParams.WRAP_CONTENT
+            )
+            sheetParams.gravity = if (sheetStyle) Gravity.BOTTOM else Gravity.CENTER
+            container.addView(sheet, sheetParams)
+            dialog.setContentView(container)
+        } else {
+            dialog.setContentView(sheet)
+        }
+
+        val title = sheet.findViewById<TextView>(R.id.folder_sheet_title)
+        title.text = folder.name.ifEmpty { getString(R.string.folder_default_name) }
+        sheet.findViewById<View>(R.id.folder_sheet_rename).setOnClickListener {
+            dialog.dismiss()
+            promptRenameFolder(folder.id)
+        }
+        sheet.findViewById<View>(R.id.folder_sheet_delete).setOnClickListener {
+            dialog.dismiss()
+            confirmDeleteFolder(folder.id)
+        }
+        fillFolderSheet(sheet, folder, dialog)
+
+        dialog.show()
+        dialog.window?.apply {
+            setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            if (blurred) {
+                // The window fills the screen so its blur covers all of it; the scrim dims.
+                setLayout(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT)
+                setWindowBlur(this, prefs.getBlurRadiusDp())
+            } else {
+                setDimAmount(0.55f)
+                addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+                if (sheetStyle) {
+                    setGravity(Gravity.BOTTOM)
+                    setLayout(
+                        WindowManager.LayoutParams.MATCH_PARENT,
+                        WindowManager.LayoutParams.WRAP_CONTENT
+                    )
+                } else {
+                    setGravity(Gravity.CENTER)
+                    setLayout(
+                        (resources.displayMetrics.widthPixels * 0.92f).toInt(),
+                        WindowManager.LayoutParams.WRAP_CONTENT
+                    )
+                }
+            }
+        }
+    }
+
+    /** Fills a folder sheet with the apps inside it, as rows of ordinary app cells. */
+    private fun fillFolderSheet(sheet: View, folder: LauncherFolder, dialog: Dialog) {
+        val area = sheet.findViewById<LinearLayout>(R.id.folder_sheet_apps)
+        val empty = sheet.findViewById<TextView>(R.id.folder_sheet_empty)
+        val scroll = sheet.findViewById<View>(R.id.folder_sheet_scroll)
+        area.removeAllViews()
+
+        val apps = folder.children.mapNotNull { appByKey(it) }
+        empty.visibility = if (apps.isEmpty()) View.VISIBLE else View.GONE
+        scroll.visibility = if (apps.isEmpty()) View.GONE else View.VISIBLE
+        if (apps.isEmpty()) return
+
+        val columns = prefs.getFolderGridColumns()
+        val showLabels = prefs.getShowLabels()
+        val iconPx = dp(prefs.getIconSizeDp())
+        for (chunk in apps.chunked(columns)) {
+            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            for (app in chunk) {
+                val cell = layoutInflater.inflate(R.layout.item_app, row, false)
+                row.addView(cell, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+                AppCell.bind(
+                    cell,
+                    app,
+                    showLabels,
+                    iconPx,
+                    0,
+                    { tapped ->
+                        dialog.dismiss()
+                        launchApp(tapped)
+                    },
+                    { _, anchor -> showFolderChildMenu(folder, app, anchor, dialog) },
+                    scope = IconScope.FOLDER
+                )
+            }
+            // Keep the cells of a part-filled last row as wide as the ones above them.
+            repeat(columns - chunk.size) {
+                row.addView(Space(this), LinearLayout.LayoutParams(0, 1, 1f))
+            }
+            area.addView(row)
+        }
+    }
+
+    private fun showFolderChildMenu(folder: LauncherFolder, app: AppInfo, anchor: View, dialog: Dialog) {
+        val popup = PopupMenu(this, anchor)
+        popup.menu.add(0, MENU_FOLDER_REMOVE, 0, R.string.folder_remove_app)
+        popup.menu.add(0, MENU_INFO, 1, R.string.action_app_info)
+        popup.setOnMenuItemClickListener { menuItem ->
+            when (menuItem.itemId) {
+                MENU_FOLDER_REMOVE -> {
+                    prefs.removeAppFromFolder(folder.id, app.key)
+                    dialog.dismiss()
+                    refreshHomeAndDock()
+                }
+                MENU_INFO -> AppRepository.openAppInfo(this, app)
+                else -> return@setOnMenuItemClickListener false
+            }
+            true
+        }
+        popup.show()
+    }
+
+    private fun showFolderMenu(item: HomeItem, anchor: View) {
+        val folder = prefs.folderById(item.folderId) ?: return
+        val popup = PopupMenu(this, anchor)
+        popup.menu.add(0, MENU_FOLDER_OPEN, 0, R.string.folder_open)
+        popup.menu.add(0, MENU_FOLDER_RENAME, 1, R.string.action_rename)
+        popup.menu.add(0, MENU_FOLDER_DELETE, 2, R.string.folder_delete)
+        popup.setOnMenuItemClickListener { menuItem ->
+            when (menuItem.itemId) {
+                MENU_FOLDER_OPEN -> openFolder(item)
+                MENU_FOLDER_RENAME -> promptRenameFolder(folder.id)
+                MENU_FOLDER_DELETE -> confirmDeleteFolder(folder.id)
+                else -> return@setOnMenuItemClickListener false
+            }
+            true
+        }
+        popup.show()
+    }
+
+    private fun promptRenameFolder(folderId: String) {
+        val folder = prefs.folderById(folderId) ?: return
+        val input = EditText(this).apply {
+            setText(folder.name)
+            hint = getString(R.string.folder_name_hint)
+            setSelection(text.length)
+            val params = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+            val pad = dp(20)
+            params.setMargins(pad, dp(8), pad, 0)
+            layoutParams = params
+        }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.folder_rename)
+            .setView(input)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                val name = input.text.toString().trim().ifEmpty { getString(R.string.folder_default_name) }
+                prefs.renameFolder(folderId, name)
+                refreshHomeAndDock()
+            }
+            .show()
+    }
+
+    private fun confirmDeleteFolder(folderId: String) {
+        val folder = prefs.folderById(folderId) ?: return
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.folder_delete_confirm, folder.name))
+            .setMessage(R.string.folder_delete_message)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.folder_delete) { _, _ -> deleteFolder(folderId) }
+            .show()
+    }
+
+    /** Removes a folder's cell; its apps return to the home screen unless the setting says otherwise. */
+    private fun deleteFolder(folderId: String) {
+        val folder = prefs.folderById(folderId) ?: return
+        val items = prefs.getHomeItems()
+        val placement = items.firstOrNull { it.isFolder && it.folderId == folderId }
+        val kept = items.filterNot { it.isFolder && it.folderId == folderId }.toMutableList()
+        prefs.removeFolderRecord(folderId)
+
+        if (placement != null && prefs.isUnfoldOnDelete()) {
+            val columns = binding.workspace.columns
+            val rows = binding.workspace.rows
+            for (key in folder.children) {
+                val app = appByKey(key) ?: continue
+                val placed = HomeItem(app.packageName, app.activityName)
+                val slot = HomeGeometry.freeSlotOnPage(kept, columns, rows, placement.page)
+                    ?: HomeGeometry.firstFreeSlot(
+                        kept,
+                        columns,
+                        rows,
+                        pages = maxOf(prefs.getHomePageCount(), placement.page + 1)
+                    )
+                    ?: break
+                kept.add(placed.copy(page = slot.page, row = slot.row, col = slot.col))
+            }
+        }
+
+        prefs.setHomeItems(kept)
+        refreshHomeAndDock()
+    }
+
+    /**
+     * Puts a folder where [occupant] sat and files both apps inside it. The folder takes over the
+     * occupant's cell, and neither app keeps a placement of its own.
+     */
+    private fun createFolder(occupant: HomeItem?, incoming: AppInfo, items: List<HomeItem>): Boolean {
+        if (!prefs.areFoldersEnabled()) return false
+        val first = occupant?.takeIf { it.isApp } ?: return false
+        val folderId = prefs.newFolderId()
+        val name = getString(R.string.folder_default_name)
+        prefs.upsertFolder(LauncherFolder(folderId, name, listOf(first.appKey, incoming.key)))
+
+        val cell = HomeItem(
+            packageName = "",
+            folderId = folderId,
+            page = first.page,
+            row = first.row,
+            col = first.col,
+            rowSpan = first.rowSpan,
+            colSpan = first.colSpan
+        )
+        val kept = items.filterNot { it.id == first.id || (it.isApp && it.appKey == incoming.key) } + cell
+        prefs.setHomeItems(kept)
+        refreshHomeAndDock()
+        return true
+    }
+
+    /**
+     * Files an app into the folder it was dropped on. Returns false — leaving the caller to fall
+     * back to ordinary placement — when there is no folder there or it is already full.
+     */
+    private fun addToFolderAt(target: HomeItem, incoming: AppInfo, items: List<HomeItem>): Boolean {
+        val placement = items.firstOrNull { it.isFolder && it.overlaps(target) } ?: return false
+        val folder = prefs.folderById(placement.folderId) ?: return false
+        if (incoming.key !in folder.children && !prefs.addAppToFolder(folder.id, incoming.key)) {
+            // The folder is full: the caller places the app on the grid instead.
+            return false
+        }
+        // The app is in the folder now, so its own placement goes.
+        prefs.setHomeItems(items.filterNot { it.isApp && it.appKey == incoming.key })
+        refreshHomeAndDock()
+        return true
     }
 
     private fun enterEditMode() {
@@ -887,6 +1462,7 @@ class MainActivity : AppCompatActivity() {
         widgetSheetPeeking = false
         binding.widgetSheet.visibility = View.VISIBLE
         binding.widgetSheetScrim.alpha = 0f
+        updateBlur()
         panel.post {
             panel.translationY = panel.height.toFloat()
             panel.animate()
@@ -962,6 +1538,7 @@ class MainActivity : AppCompatActivity() {
         binding.widgetSheetPanel.translationY = 0f
         binding.widgetSheetScrim.alpha = 1f
         binding.widgetSheet.visibility = View.GONE
+        updateBlur()
     }
 
     /**
@@ -1650,12 +2227,33 @@ class MainActivity : AppCompatActivity() {
         if (id != HomeItem(app.packageName, app.activityName).id) return
 
         val items = prefs.getHomeItems()
-        val index = items.indexOfFirst { !it.isWidget && it.packageName == app.packageName }
+        val index = items.indexOfFirst { it.isApp && it.packageName == app.packageName }
+        val target = HomeItem(app.packageName, app.activityName, page = page, row = row, col = col)
+
+        // A drawer app dropped on a folder joins it; dropped on another app it makes a folder.
+        if (prefs.areFoldersEnabled()) {
+            val occupant = items.firstOrNull {
+                it.overlaps(target) && !(it.isApp && it.packageName == app.packageName)
+            }
+            val handled = when {
+                occupant == null -> false
+                occupant.isFolder -> addToFolderAt(target, app, items)
+                occupant.isApp -> createFolder(occupant, app, items)
+                else -> false
+            }
+            if (handled) {
+                restoreDrawerOrder()
+                pendingDrawerApp = null
+                closeDrawer()
+                return
+            }
+        }
+
         val moving = if (index >= 0) {
             // Already on the home screen: the drop moves it rather than adding a second copy.
             items[index].copy(page = page, row = row, col = col)
         } else {
-            HomeItem(app.packageName, app.activityName, page = page, row = row, col = col)
+            target
         }
 
         val columns = binding.workspace.columns
@@ -1692,7 +2290,7 @@ class MainActivity : AppCompatActivity() {
 
     // ---------------------------------------------------------------- drawer rendering
 
-    /** Rebuilds the drawer for the current layout mode, search query and settings. */
+    /** Rebuilds the drawer for the current layout mode, search query, tab and settings. */
     private fun renderDrawer() {
         if (!::orderAdapter.isInitialized) return
 
@@ -1702,7 +2300,13 @@ class MainActivity : AppCompatActivity() {
 
         val hidden = prefs.getHiddenApps()
         val visible = allApps.filter { it.packageName !in hidden }
-        val apps = visible
+        val categories = prefs.getDrawerCategories()
+        renderDrawerTabs(categories)
+
+        // A search that is not scoped to the tab covers every app, so the tab can be ignored.
+        val showEverything = searching && !prefs.isDrawerTabSearchScoped()
+        val pool = if (showEverything) visible else appsForSelectedTab(visible, hidden, categories)
+        val apps = pool
             .sortedBy { it.label.lowercase() }
             .let { sorted ->
                 if (searching) sorted.filter { it.label.contains(query, ignoreCase = true) } else sorted
@@ -1736,6 +2340,108 @@ class MainActivity : AppCompatActivity() {
             DrawerLayoutMode.AZ -> showSections(apps, columns, labels, iconPx, spacing)
             DrawerLayoutMode.CUSTOM -> showCustom(apps, columns, labels, iconPx, spacing)
         }
+    }
+
+    /** The apps the drawer's current tab stands for. */
+    private fun appsForSelectedTab(
+        visible: List<AppInfo>,
+        hidden: Set<String>,
+        categories: List<DrawerCategory>
+    ): List<AppInfo> = when (val tab = selectedTabId) {
+        null -> visible
+        HIDDEN_TAB -> allApps.filter { it.packageName in hidden }
+        else -> {
+            val category = categories.firstOrNull { it.id == tab }
+            if (category == null) {
+                // The tab was deleted under us: fall back to All.
+                selectedTabId = null
+                visible
+            } else {
+                visible.filter { it.packageName in category.packages }
+            }
+        }
+    }
+
+    /**
+     * Draws the category tabs, moves them to where the settings put them and keeps the selection
+     * pointing at a tab that still exists. Tabs only appear once there is something to switch
+     * between, so a drawer with no categories looks exactly as it always did.
+     */
+    private fun renderDrawerTabs(categories: List<DrawerCategory>) {
+        val tabs = binding.drawerTabs
+        val wanted = prefs.areDrawerTabsEnabled() && (categories.isNotEmpty() || prefs.showHiddenDrawerTab())
+        if (!wanted) {
+            tabs.removeAllTabs()
+            tabs.visibility = View.GONE
+            return
+        }
+        tabs.visibility = View.VISIBLE
+
+        // Sit above the search field or below it: the two are the only views in this column.
+        (tabs.parent as? LinearLayout)?.let { column ->
+            val index = if (prefs.getDrawerTabPosition() == DrawerTabPosition.ABOVE_SEARCH) 0 else 1
+            if (column.indexOfChild(tabs) != index) {
+                column.removeView(tabs)
+                column.addView(tabs, index.coerceAtMost(column.childCount))
+            }
+        }
+
+        tabs.tabMode = TabLayout.MODE_FIXED
+
+        updatingTabs = true
+        tabs.removeAllTabs()
+        if (prefs.showAllDrawerTab()) addDrawerTab(tabs, null, getString(R.string.drawer_tab_all))
+        for (category in categories) addDrawerTab(tabs, category.id, category.name)
+        if (prefs.showHiddenDrawerTab()) {
+            addDrawerTab(tabs, HIDDEN_TAB, getString(R.string.drawer_tab_hidden))
+        }
+
+        val index = (0 until tabs.tabCount).firstOrNull { tabs.getTabAt(it)?.tag == selectedTabId } ?: 0
+        val tab = tabs.getTabAt(index)
+        if (tab != null) tabs.selectTab(tab, false)
+        selectedTabId = tab?.tag as? String
+        updatingTabs = false
+        styleDrawerTabs()
+    }
+
+    private fun addDrawerTab(tabs: TabLayout, id: String?, label: String) {
+        val view = TextView(this).apply {
+            text = label
+            textSize = 14f
+            gravity = Gravity.CENTER
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            setPadding(dp(16), dp(8), dp(16), dp(8))
+        }
+        tabs.addTab(tabs.newTab().setTag(id).setCustomView(view))
+    }
+
+    /** Repaints the tabs for which one is selected. */
+    private fun styleDrawerTabs() {
+        val tabs = binding.drawerTabs
+        val selectedPosition = tabs.selectedTabPosition
+        for (index in 0 until tabs.tabCount) {
+            val view = tabs.getTabAt(index)?.customView as? TextView ?: continue
+            val selected = index == selectedPosition
+            applyTabStyle(view, selected)
+        }
+    }
+
+    /** Filled pills, the selected one tinted; the one look the tabs have. */
+    private fun applyTabStyle(view: TextView, selected: Boolean) {
+        view.background = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = dp(18).toFloat()
+            setColor(if (selected) TAB_SELECTED_COLOR else Color.TRANSPARENT)
+        }
+        view.setTextColor(if (selected) Color.WHITE else TAB_TEXT_COLOR)
+    }
+
+    private fun onDrawerTabSelected(tab: TabLayout.Tab?) {
+        if (updatingTabs) return
+        selectedTabId = tab?.tag as? String
+        styleDrawerTabs()
+        renderDrawer()
     }
 
     /** Removes per-mode decorations, drag support and overlay visibility. */
@@ -1943,6 +2649,25 @@ class MainActivity : AppCompatActivity() {
         AppRepository.launch(this, app)
     }
 
+    private fun createDrawerFolder(app: AppInfo) {
+        val input = EditText(this).apply {
+            hint = getString(R.string.folder_name_hint)
+            setText(getString(R.string.folder_default_name))
+            setSelection(text.length)
+        }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.folder_create)
+            .setView(input)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                val name = input.text.toString().trim().ifEmpty { getString(R.string.folder_default_name) }
+                val folder = DrawerFolder(prefs.newDrawerFolderId(), name, listOf(app.key))
+                prefs.upsertDrawerFolder(folder)
+                refreshHomeAndDock()
+            }
+            .show()
+    }
+
     private fun showAppMenu(app: AppInfo, anchor: View) {
         val onHome = prefs.isAppOnHome(app.packageName)
         val docked = prefs.isDocked(app.packageName)
@@ -1960,6 +2685,16 @@ class MainActivity : AppCompatActivity() {
         }
         if (!app.isSystemApp && app.packageName != packageName) {
             popup.menu.add(0, MENU_UNINSTALL, 5, R.string.action_uninstall)
+        }
+
+        // Folders can be made straight out of any app: tapping an app for longer-than-a-tap gives
+        // it its own folder here, without having to drag anything around.
+        if (prefs.areFoldersEnabled() && drawerOpen) {
+            popup.menu.add(0, MENU_FOLDER_CREATE, 6, R.string.folder_create)
+            val existingDrawerFolders = prefs.getDrawerFolders().filter { it.canAdd(app.key) }
+            if (existingDrawerFolders.isNotEmpty()) {
+                popup.menu.add(0, MENU_FOLDER_ADD, 7, R.string.folder_add_to_folder)
+            }
         }
 
         popup.setOnMenuItemClickListener { item ->
@@ -1980,7 +2715,24 @@ class MainActivity : AppCompatActivity() {
                 MENU_WIDGETS -> openWidgetSheet(app.packageName)
                 MENU_HIDE -> hideApp(app)
                 MENU_INFO -> AppRepository.openAppInfo(this, app)
-                MENU_UNINSTALL -> AppRepository.requestUninstall(this, app)
+                MENU_FOLDER_ADD -> {
+                    val folders = prefs.getDrawerFolders().filter { it.canAdd(app.key) }
+                    if (folders.isEmpty()) return@setOnMenuItemClickListener true
+                    val names = folders.map { it.name }.toTypedArray()
+                    AlertDialog.Builder(this)
+                        .setTitle(R.string.folder_add_to_folder)
+                        .setItems(names) { _, which ->
+                            prefs.addAppToDrawerFolder(folders[which].id, app.key)
+                            refreshHomeAndDock()
+                        }
+                        .show()
+                    true
+                }
+                MENU_FOLDER_CREATE -> {
+                    createDrawerFolder(app)
+                    true
+                }
+
                 else -> return@setOnMenuItemClickListener false
             }
             true
@@ -2011,6 +2763,7 @@ class MainActivity : AppCompatActivity() {
 
         // Hide the home screen so the wallpaper shows behind the drawer instead.
         binding.homeContainer.visibility = View.INVISIBLE
+        updateBlur()
 
         val drawer = binding.drawerContainer
         drawer.visibility = View.VISIBLE
@@ -2047,6 +2800,7 @@ class MainActivity : AppCompatActivity() {
                 drawer.translationY = 0f
                 binding.drawerSearch.text?.clear()
                 binding.homeContainer.visibility = View.VISIBLE
+                updateBlur()
             }
             .start()
     }
@@ -2071,7 +2825,7 @@ class MainActivity : AppCompatActivity() {
      * XML dimension, which the framework rounds the same way.
      */
     private fun dpExact(value: Int): Int =
-        Math.round(value * resources.displayMetrics.density)
+        Math.round(value * resources.displayMetrics.density).toInt()
 
     private companion object {
         const val DRAWER_ANIM_MS = 220L
@@ -2123,5 +2877,29 @@ class MainActivity : AppCompatActivity() {
         const val MENU_INFO = 4
         const val MENU_UNINSTALL = 5
         const val MENU_HIDE = 6
+        const val MENU_FOLDER_OPEN = 7
+        const val MENU_FOLDER_RENAME = 8
+        const val MENU_FOLDER_DELETE = 9
+        const val MENU_FOLDER_REMOVE = 10
+        const val MENU_FOLDER_CREATE = 11
+        const val MENU_FOLDER_ADD = 12
+
+        /** The translucency of a folder's own backdrop, over the wallpaper. */
+        const val FOLDER_BACKDROP_COLOR = 0x40FFFFFF
+
+        /** The tab id standing for the hidden-apps tab; `null` is the "All" tab. */
+        const val HIDDEN_TAB = "hidden"
+
+        /** Tab colours: the selected pill and the text of an unselected tab. */
+        val TAB_SELECTED_COLOR = 0x33FFFFFF
+        val TAB_TEXT_COLOR = Color.argb(0xB3, 0xFF, 0xFF, 0xFF)
+
+        /** The dim laid over the blurred wallpaper behind a sheet. */
+        val SHEET_SCRIM_COLOR = Color.argb(0x99, 0x00, 0x00, 0x00)
+
+        /** How long the swipe-down tap of feedback runs. */
+        const val GESTURE_HAPTIC_MS = 20L
     }
+
+
 }

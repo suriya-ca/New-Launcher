@@ -9,6 +9,7 @@ import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.sdev.newlauncher.R
 import com.sdev.newlauncher.data.AppInfo
+import com.sdev.newlauncher.data.IconScope
 
 /** One row in the A–Z drawer: either a letter header or an app. */
 sealed interface DrawerRow {
@@ -42,6 +43,9 @@ class SectionedAppAdapter(
                 notifyItemRangeChanged(0, itemCount)
             }
         }
+
+    /** The surface these cells are drawn on, which decides shape and icon-pack application. */
+    var iconScope: IconScope = IconScope.HOME
 
     override fun getItemViewType(position: Int): Int =
         if (getRow(position) is DrawerRow.Header) TYPE_HEADER else TYPE_APP
@@ -111,7 +115,8 @@ class SectionedAppAdapter(
                 0,
                 onAppClick,
                 onAppLongClick,
-                onAppDragStart
+                onAppDragStart,
+                iconScope
             )
         }
     }

@@ -11,6 +11,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.checkbox.MaterialCheckBox
 import com.sdev.newlauncher.R
 import com.sdev.newlauncher.data.AppInfo
+import com.sdev.newlauncher.data.IconScope
 
 /**
  * Lists every installed app with a checkbox so the user can hide it from the app drawer.
@@ -43,7 +44,7 @@ class HiddenAppAdapter(
         private val check: MaterialCheckBox = itemView.findViewById(R.id.app_check)
 
         fun bind(app: AppInfo) {
-            icon.setImageDrawable(app.icon)
+            icon.setImageDrawable(IconRenderer.icon(itemView.context, app, IconScope.DRAWER))
             label.text = app.label
             check.isChecked = app.packageName in hidden
             itemView.contentDescription = app.label

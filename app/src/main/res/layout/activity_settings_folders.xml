@@ -1,0 +1,298 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/settings_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?android:attr/colorBackground"
+    android:orientation="vertical">
+
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="?attr/actionBarSize"
+        app:navigationIcon="@drawable/ic_arrow_back"
+        app:title="@string/settings_section_folders" />
+
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:clipToPadding="false"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingStart="16dp"
+            android:paddingTop="8dp"
+            android:paddingEnd="16dp"
+            android:paddingBottom="24dp">
+
+            <!-- ===================== FOLDERS ===================== -->
+            <LinearLayout style="@style/SettingsCard">
+
+                <LinearLayout style="@style/SettingsRow">
+
+                    <ImageView
+                        style="@style/SettingsRowIcon"
+                        android:src="@drawable/ic_folder" />
+
+                    <LinearLayout style="@style/SettingsRowText">
+
+                        <TextView
+                            style="@style/SettingsRowTitleInline"
+                            android:text="@string/settings_folders_enabled" />
+
+                        <TextView
+                            style="@style/SettingsRowSummary"
+                            android:text="@string/settings_folders_enabled_summary" />
+                    </LinearLayout>
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/folders_enabled_switch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                </LinearLayout>
+
+                <View style="@style/SettingsDivider" />
+
+                <LinearLayout style="@style/SettingsRow">
+
+                    <LinearLayout style="@style/SettingsRowText">
+
+                        <TextView
+                            style="@style/SettingsRowTitleInline"
+                            android:text="@string/settings_folder_preview" />
+
+                        <TextView
+                            style="@style/SettingsRowSummary"
+                            android:text="@string/settings_folder_preview_summary" />
+
+                        <RadioGroup
+                            android:id="@+id/folder_preview_group"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical">
+
+                            <com.google.android.material.radiobutton.MaterialRadioButton
+                                android:id="@+id/folder_preview_2x2"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="@string/settings_folder_preview_2x2" />
+
+                            <com.google.android.material.radiobutton.MaterialRadioButton
+                                android:id="@+id/folder_preview_3x3"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="@string/settings_folder_preview_3x3" />
+                        </RadioGroup>
+                    </LinearLayout>
+                </LinearLayout>
+
+                <View style="@style/SettingsDivider" />
+
+                <LinearLayout style="@style/SettingsRow">
+
+                    <LinearLayout style="@style/SettingsRowText">
+
+                        <TextView
+                            style="@style/SettingsRowTitleInline"
+                            android:text="@string/settings_folder_background" />
+
+                        <TextView
+                            style="@style/SettingsRowSummary"
+                            android:text="@string/settings_folder_background_summary" />
+
+                        <RadioGroup
+                            android:id="@+id/folder_background_group"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical">
+
+                            <com.google.android.material.radiobutton.MaterialRadioButton
+                                android:id="@+id/folder_bg_auto"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="@string/settings_folder_bg_auto" />
+
+                            <com.google.android.material.radiobutton.MaterialRadioButton
+                                android:id="@+id/folder_bg_circle"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="@string/settings_folder_bg_circle" />
+
+                            <com.google.android.material.radiobutton.MaterialRadioButton
+                                android:id="@+id/folder_bg_rounded"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="@string/settings_folder_bg_rounded" />
+
+                            <com.google.android.material.radiobutton.MaterialRadioButton
+                                android:id="@+id/folder_bg_square"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="@string/settings_folder_bg_square" />
+                        </RadioGroup>
+                    </LinearLayout>
+                </LinearLayout>
+
+                <View style="@style/SettingsDivider" />
+
+                <LinearLayout style="@style/SettingsRow">
+
+                    <LinearLayout style="@style/SettingsRowText">
+
+                        <TextView
+                            style="@style/SettingsRowTitleInline"
+                            android:text="@string/settings_folder_open_style" />
+
+                        <TextView
+                            style="@style/SettingsRowSummary"
+                            android:text="@string/settings_folder_open_style_summary" />
+
+                        <RadioGroup
+                            android:id="@+id/folder_open_group"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical">
+
+                            <com.google.android.material.radiobutton.MaterialRadioButton
+                                android:id="@+id/folder_open_sheet"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="@string/settings_folder_open_sheet" />
+
+                            <com.google.android.material.radiobutton.MaterialRadioButton
+                                android:id="@+id/folder_open_popup"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="@string/settings_folder_open_popup" />
+                        </RadioGroup>
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- ===================== INSIDE A FOLDER ===================== -->
+            <LinearLayout style="@style/SettingsCard">
+
+                <LinearLayout style="@style/SettingsRow">
+
+                    <LinearLayout style="@style/SettingsRowText">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                style="@style/SettingsRowTitleWeighted"
+                                android:text="@string/settings_folder_columns" />
+
+                            <TextView
+                                android:id="@+id/folder_columns_value"
+                                style="@style/SettingsRowValueInline"
+                                tools:text="4 columns" />
+                        </LinearLayout>
+
+                        <TextView
+                            style="@style/SettingsRowSummary"
+                            android:text="@string/settings_folder_columns_summary" />
+
+                        <com.google.android.material.slider.Slider
+                            android:id="@+id/folder_columns_slider"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:stepSize="1"
+                            android:value="4"
+                            android:valueFrom="2"
+                            android:valueTo="6" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <View style="@style/SettingsDivider" />
+
+                <LinearLayout style="@style/SettingsRow">
+
+                    <LinearLayout style="@style/SettingsRowText">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                style="@style/SettingsRowTitleWeighted"
+                                android:text="@string/settings_folder_max" />
+
+                            <TextView
+                                android:id="@+id/folder_max_value"
+                                style="@style/SettingsRowValueInline"
+                                tools:text="12 apps" />
+                        </LinearLayout>
+
+                        <TextView
+                            style="@style/SettingsRowSummary"
+                            android:text="@string/settings_folder_max_summary" />
+
+                        <com.google.android.material.slider.Slider
+                            android:id="@+id/folder_max_slider"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:stepSize="2"
+                            android:value="12"
+                            android:valueFrom="4"
+                            android:valueTo="36" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <View style="@style/SettingsDivider" />
+
+                <LinearLayout style="@style/SettingsRow">
+
+                    <LinearLayout style="@style/SettingsRowText">
+
+                        <TextView
+                            style="@style/SettingsRowTitleInline"
+                            android:text="@string/settings_folder_labels" />
+
+                        <TextView
+                            style="@style/SettingsRowSummary"
+                            android:text="@string/settings_folder_labels_summary" />
+                    </LinearLayout>
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/folder_labels_switch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                </LinearLayout>
+
+                <View style="@style/SettingsDivider" />
+
+                <LinearLayout style="@style/SettingsRow">
+
+                    <LinearLayout style="@style/SettingsRowText">
+
+                        <TextView
+                            style="@style/SettingsRowTitleInline"
+                            android:text="@string/settings_folder_unfold" />
+
+                        <TextView
+                            style="@style/SettingsRowSummary"
+                            android:text="@string/settings_folder_unfold_summary" />
+                    </LinearLayout>
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/folder_unfold_switch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                </LinearLayout>
+            </LinearLayout>
+
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+</LinearLayout>

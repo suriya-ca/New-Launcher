@@ -23,8 +23,12 @@ class SwipeUpFrameLayout @JvmOverloads constructor(
     /** Invoked when the user performs an upward swipe. */
     var onSwipeUp: (() -> Unit)? = null
 
-    /** Invoked when the user performs a downward swipe. */
-    var onSwipeDown: (() -> Unit)? = null
+    /**
+     * Invoked when the user performs a downward swipe, with the coordinates the gesture started
+     * at — in this view's space, which for the launcher's root is the whole screen. The host uses
+     * them to tell a swipe that began over an icon from one that began on empty home space.
+     */
+    var onSwipeDown: ((startX: Float, startY: Float) -> Unit)? = null
 
     private val minDistancePx: Float = 80f * resources.displayMetrics.density
     private val minVelocityPx: Float = 300f * resources.displayMetrics.density
@@ -43,7 +47,7 @@ class SwipeUpFrameLayout @JvmOverloads constructor(
                     true
                 }
                 deltaY < 0 && velocityY > minVelocityPx -> {
-                    onSwipeDown?.invoke()
+                    onSwipeDown?.invoke(start.x, start.y)
                     true
                 }
                 else -> false

@@ -31,6 +31,7 @@
             android:paddingEnd="16dp"
             android:paddingBottom="24dp">
 
+            <!-- ===================== SIZE & LABELS ===================== -->
             <LinearLayout style="@style/SettingsCard">
 
                 <LinearLayout style="@style/SettingsRow">
@@ -95,6 +96,288 @@
                         android:id="@+id/show_labels_switch"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- ===================== ICON SHAPE ===================== -->
+            <LinearLayout style="@style/SettingsCard">
+
+                <LinearLayout style="@style/SettingsRow">
+
+                    <ImageView
+                        style="@style/SettingsRowIcon"
+                        android:src="@drawable/ic_icon_size" />
+
+                    <LinearLayout style="@style/SettingsRowText">
+
+                        <TextView
+                            style="@style/SettingsRowTitleInline"
+                            android:text="@string/settings_icon_shape" />
+
+                        <TextView
+                            style="@style/SettingsRowSummary"
+                            android:text="@string/settings_icon_shape_summary" />
+                    </LinearLayout>
+
+                    <ImageView
+                        android:id="@+id/shape_preview"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:contentDescription="@string/settings_icon_shape_preview"
+                        android:src="@drawable/ic_apps" />
+                </LinearLayout>
+
+                <RadioGroup
+                    android:id="@+id/shape_group"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:orientation="vertical" />
+
+                <View style="@style/SettingsDivider" />
+
+                <LinearLayout style="@style/SettingsRow">
+
+                    <LinearLayout style="@style/SettingsRowText">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                style="@style/SettingsRowTitleWeighted"
+                                android:text="@string/settings_shape_scale" />
+
+                            <TextView
+                                android:id="@+id/shape_scale_value"
+                                style="@style/SettingsRowValueInline"
+                                tools:text="100%" />
+                        </LinearLayout>
+
+                        <TextView
+                            style="@style/SettingsRowSummary"
+                            android:text="@string/settings_shape_scale_summary" />
+
+                        <com.google.android.material.slider.Slider
+                            android:id="@+id/shape_scale_slider"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:stepSize="5"
+                            android:value="100"
+                            android:valueFrom="80"
+                            android:valueTo="120" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <LinearLayout style="@style/SettingsRow">
+
+                    <LinearLayout style="@style/SettingsRowText">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                style="@style/SettingsRowTitleWeighted"
+                                android:text="@string/settings_shape_corner" />
+
+                            <TextView
+                                android:id="@+id/shape_corner_value"
+                                style="@style/SettingsRowValueInline"
+                                tools:text="22%" />
+                        </LinearLayout>
+
+                        <TextView
+                            style="@style/SettingsRowSummary"
+                            android:text="@string/settings_shape_corner_summary" />
+
+                        <com.google.android.material.slider.Slider
+                            android:id="@+id/shape_corner_slider"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:stepSize="2"
+                            android:value="22"
+                            android:valueFrom="8"
+                            android:valueTo="50" />
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- ===================== SHAPE SCOPE ===================== -->
+            <LinearLayout style="@style/SettingsCard">
+
+                <LinearLayout style="@style/SettingsRow">
+
+                    <LinearLayout style="@style/SettingsRowText">
+
+                        <TextView
+                            style="@style/SettingsRowTitleInline"
+                            android:text="@string/settings_shape_apply" />
+
+                        <TextView
+                            style="@style/SettingsRowSummary"
+                            android:text="@string/settings_shape_apply_summary" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <LinearLayout style="@style/SettingsRow">
+
+                    <TextView
+                        style="@style/SettingsRowTitleWeighted"
+                        android:text="@string/settings_scope_home" />
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/shape_home_switch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                </LinearLayout>
+
+                <LinearLayout style="@style/SettingsRow">
+
+                    <TextView
+                        style="@style/SettingsRowTitleWeighted"
+                        android:text="@string/settings_scope_dock" />
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/shape_dock_switch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                </LinearLayout>
+
+                <LinearLayout style="@style/SettingsRow">
+
+                    <TextView
+                        style="@style/SettingsRowTitleWeighted"
+                        android:text="@string/settings_scope_drawer" />
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/shape_drawer_switch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                </LinearLayout>
+
+                <LinearLayout style="@style/SettingsRow">
+
+                    <TextView
+                        style="@style/SettingsRowTitleWeighted"
+                        android:text="@string/settings_scope_folders" />
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/shape_folder_switch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- ===================== ICON PACK ===================== -->
+            <LinearLayout style="@style/SettingsCard">
+
+                <LinearLayout
+                    android:id="@+id/icon_pack_row"
+                    style="@style/SettingsRow"
+                    android:background="?attr/selectableItemBackground"
+                    android:clickable="true"
+                    android:focusable="true">
+
+                    <ImageView
+                        android:id="@+id/icon_pack_icon"
+                        style="@style/SettingsRowIcon"
+                        android:src="@drawable/ic_apps" />
+
+                    <LinearLayout style="@style/SettingsRowText">
+
+                        <TextView
+                            style="@style/SettingsRowTitleInline"
+                            android:text="@string/settings_icon_pack" />
+
+                        <TextView
+                            android:id="@+id/icon_pack_summary"
+                            style="@style/SettingsRowSummary"
+                            tools:text="System default" />
+                    </LinearLayout>
+
+                    <ImageView
+                        style="@style/SettingsRowChevron"
+                        android:src="@drawable/ic_chevron_right" />
+                </LinearLayout>
+
+                <View style="@style/SettingsDivider" />
+
+                <LinearLayout style="@style/SettingsRow">
+
+                    <TextView
+                        style="@style/SettingsRowTitleWeighted"
+                        android:text="@string/settings_scope_home" />
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/pack_home_switch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                </LinearLayout>
+
+                <LinearLayout style="@style/SettingsRow">
+
+                    <TextView
+                        style="@style/SettingsRowTitleWeighted"
+                        android:text="@string/settings_scope_dock" />
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/pack_dock_switch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                </LinearLayout>
+
+                <LinearLayout style="@style/SettingsRow">
+
+                    <TextView
+                        style="@style/SettingsRowTitleWeighted"
+                        android:text="@string/settings_scope_drawer" />
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/pack_drawer_switch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                </LinearLayout>
+
+                <LinearLayout style="@style/SettingsRow">
+
+                    <TextView
+                        style="@style/SettingsRowTitleWeighted"
+                        android:text="@string/settings_scope_folders" />
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/pack_folder_switch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                </LinearLayout>
+
+                <View style="@style/SettingsDivider" />
+
+                <LinearLayout
+                    android:id="@+id/icon_reload_row"
+                    style="@style/SettingsRow"
+                    android:background="?attr/selectableItemBackground"
+                    android:clickable="true"
+                    android:focusable="true">
+
+                    <ImageView
+                        style="@style/SettingsRowIcon"
+                        android:src="@drawable/ic_reset" />
+
+                    <LinearLayout style="@style/SettingsRowText">
+
+                        <TextView
+                            style="@style/SettingsRowTitleInline"
+                            android:text="@string/settings_icon_reload" />
+
+                        <TextView
+                            style="@style/SettingsRowSummary"
+                            android:text="@string/settings_icon_reload_summary" />
+                    </LinearLayout>
                 </LinearLayout>
             </LinearLayout>
 

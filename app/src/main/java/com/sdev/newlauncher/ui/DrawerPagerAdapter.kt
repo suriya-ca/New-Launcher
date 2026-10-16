@@ -7,6 +7,7 @@ import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.sdev.newlauncher.R
 import com.sdev.newlauncher.data.AppInfo
+import com.sdev.newlauncher.data.IconScope
 
 /**
  * Backs the horizontally paged drawer layout: each page is a fixed grid of apps that fits
@@ -39,6 +40,9 @@ class DrawerPagerAdapter(
             }
         }
 
+    /** The surface these cells are drawn on, which decides shape and icon-pack application. */
+    var iconScope: IconScope = IconScope.DRAWER
+
     fun submitPages(pages: List<List<AppInfo>>) {
         this.pages = pages
         notifyDataSetChanged()
@@ -63,6 +67,7 @@ class DrawerPagerAdapter(
     override fun onBindViewHolder(holder: PageViewHolder, position: Int) {
         holder.adapter.showLabels = showLabels
         holder.adapter.iconSizePx = iconSizePx
+        holder.adapter.iconScope = iconScope
         holder.adapter.submitList(pages[position])
     }
 

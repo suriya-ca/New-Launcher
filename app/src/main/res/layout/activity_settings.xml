@@ -127,6 +127,102 @@
                 </LinearLayout>
             </LinearLayout>
 
+            <!-- ===================== FOLDERS ===================== -->
+            <LinearLayout
+                android:id="@+id/row_folders"
+                style="@style/SettingsCard"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground">
+
+                <LinearLayout style="@style/SettingsRow">
+
+                    <ImageView
+                        style="@style/SettingsRowIcon"
+                        android:src="@drawable/ic_folder" />
+
+                    <LinearLayout style="@style/SettingsRowText">
+
+                        <TextView
+                            style="@style/SettingsRowTitleInline"
+                            android:text="@string/settings_section_folders" />
+
+                        <TextView
+                            android:id="@+id/folders_summary"
+                            style="@style/SettingsRowSummary"
+                            tools:text="2 folders" />
+                    </LinearLayout>
+
+                    <ImageView
+                        style="@style/SettingsRowChevron"
+                        android:src="@drawable/ic_chevron_right" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- ===================== GESTURES ===================== -->
+            <LinearLayout
+                android:id="@+id/row_gestures"
+                style="@style/SettingsCard"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground">
+
+                <LinearLayout style="@style/SettingsRow">
+
+                    <ImageView
+                        style="@style/SettingsRowIcon"
+                        android:src="@drawable/ic_swipe" />
+
+                    <LinearLayout style="@style/SettingsRowText">
+
+                        <TextView
+                            style="@style/SettingsRowTitleInline"
+                            android:text="@string/settings_section_gestures" />
+
+                        <TextView
+                            android:id="@+id/gestures_summary"
+                            style="@style/SettingsRowSummary"
+                            tools:text="Swipe down: Notification shade" />
+                    </LinearLayout>
+
+                    <ImageView
+                        style="@style/SettingsRowChevron"
+                        android:src="@drawable/ic_chevron_right" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- ===================== BLUR ===================== -->
+            <LinearLayout
+                android:id="@+id/row_blur"
+                style="@style/SettingsCard"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground">
+
+                <LinearLayout style="@style/SettingsRow">
+
+                    <ImageView
+                        style="@style/SettingsRowIcon"
+                        android:src="@drawable/ic_blur" />
+
+                    <LinearLayout style="@style/SettingsRowText">
+
+                        <TextView
+                            style="@style/SettingsRowTitleInline"
+                            android:text="@string/settings_section_blur" />
+
+                        <TextView
+                            android:id="@+id/blur_summary"
+                            style="@style/SettingsRowSummary"
+                            tools:text="Blur: On" />
+                    </LinearLayout>
+
+                    <ImageView
+                        style="@style/SettingsRowChevron"
+                        android:src="@drawable/ic_chevron_right" />
+                </LinearLayout>
+            </LinearLayout>
+
             <!-- ===================== DOCK ===================== -->
             <LinearLayout
                 android:id="@+id/row_dock"

@@ -102,4 +102,131 @@
         <item quantity="one">The %1$d item on it goes with it.</item>
         <item quantity="other">All %1$d items on it go with it.</item>
     </plurals>
+
+    <!-- ===================== icon shape & icon packs ===================== -->
+    <string name="settings_icon_shape">Icon shape</string>
+    <string name="settings_icon_shape_summary">The mask app icons are drawn inside</string>
+    <string name="settings_icon_shape_preview">Icon shape preview</string>
+    <string name="settings_shape_none">System default</string>
+    <string name="settings_shape_circle">Circle</string>
+    <string name="settings_shape_squircle">Squircle</string>
+    <string name="settings_shape_rounded">Rounded square</string>
+    <string name="settings_shape_teardrop">Teardrop</string>
+    <string name="settings_shape_hexagon">Hexagon</string>
+    <string name="settings_shape_scale">Icon scale</string>
+    <string name="settings_shape_scale_summary">How much of the cell an icon fills</string>
+    <string name="settings_shape_corner">Corner radius</string>
+    <string name="settings_shape_corner_summary">Used by the rounded square shape</string>
+    <string name="settings_shape_apply">Apply shape to</string>
+    <string name="settings_shape_apply_summary">Choose which surfaces the shape is drawn on</string>
+    <string name="settings_scope_home">Home screen</string>
+    <string name="settings_scope_dock">Dock</string>
+    <string name="settings_scope_drawer">App drawer</string>
+    <string name="settings_scope_folders">Folders</string>
+    <string name="settings_icon_pack">Icon pack</string>
+    <string name="settings_icon_pack_system">System default</string>
+    <string name="settings_icon_pack_none">No icon packs found</string>
+    <string name="settings_icon_reload">Reload icon packs</string>
+    <string name="settings_icon_reload_summary">Re-scan for packs and drop the icon cache</string>
+
+    <!-- ===================== folders ===================== -->
+    <string name="settings_section_folders">Folders</string>
+    <string name="settings_folders_enabled">App folders</string>
+    <string name="settings_folders_enabled_summary">Drag one app onto another to make a folder</string>
+    <string name="settings_folder_preview">Folder preview</string>
+    <string name="settings_folder_preview_summary">How many apps a folder shows on its cell</string>
+    <string name="settings_folder_preview_2x2">2 \u00d7 2 grid</string>
+    <string name="settings_folder_preview_3x3">3 \u00d7 3 grid</string>
+    <string name="settings_folder_background">Folder backdrop</string>
+    <string name="settings_folder_background_summary">The translucent panel drawn behind the mini app grid inside the folder\'s home icon</string>
+    <string name="settings_folder_bg_auto">Match icon shape</string>
+    <string name="settings_folder_bg_circle">Circle</string>
+    <string name="settings_folder_bg_rounded">Rounded</string>
+    <string name="settings_folder_bg_square">Square</string>
+    <string name="settings_folder_open_style">Open style</string>
+    <string name="settings_folder_open_style_summary">How an open folder is presented</string>
+    <string name="settings_folder_open_sheet">Bottom sheet</string>
+    <string name="settings_folder_open_popup">Centre popup</string>
+    <string name="settings_folder_columns">Folder columns</string>
+    <string name="settings_folder_columns_summary">Columns of the grid inside an open folder</string>
+    <string name="settings_folder_max">Apps per folder</string>
+    <string name="settings_folder_max_summary">A folder stops taking apps when it is full</string>
+    <string name="settings_folder_max_value">%1$d apps</string>
+    <string name="settings_folder_labels">Show folder names</string>
+    <string name="settings_folder_labels_summary">Draw the name under a folder\'s cell</string>
+    <string name="settings_folder_unfold">Unfold when deleted</string>
+    <string name="settings_folder_unfold_summary">Put the apps back on the home screen when a folder is removed</string>
+    <string name="folder_default_name">Folder</string>
+    <string name="folder_create">Create folder</string>
+    <string name="folder_add_to_folder">Add to folder</string>
+    <string name="folder_empty">This folder is empty</string>
+    <string name="folder_full">This folder is full</string>
+    <string name="folder_rename">Rename folder</string>
+    <string name="folder_delete">Delete folder</string>
+    <string name="folder_delete_confirm">Delete \"%1$s\"?</string>
+    <string name="folder_delete_message">The folder goes, and what happens to its apps depends on the folder settings.</string>
+    <string name="folder_remove_app">Remove from folder</string>
+    <string name="folder_open">Open folder</string>
+    <string name="folder_name_hint">Folder name</string>
+
+    <!-- ===================== gestures ===================== -->
+    <string name="settings_section_gestures">Gestures</string>
+    <string name="settings_swipe_down">Swipe down</string>
+    <string name="settings_swipe_down_summary">Open a panel by swiping down on the empty home screen</string>
+    <string name="settings_swipe_down_action">Swipe-down action</string>
+    <string name="settings_swipe_notifications">Notification shade</string>
+    <string name="settings_swipe_quick_settings">Quick settings</string>
+    <string name="settings_swipe_empty_only">Empty space only</string>
+    <string name="settings_swipe_empty_only_summary">Ignore the swipe when it starts on an icon or widget</string>
+    <string name="settings_haptics">Haptic feedback</string>
+    <string name="settings_haptics_summary">Vibrate when a gesture fires</string>
+    <string name="gestures_hub_summary">Swipe down: %1$s</string>
+
+    <!-- ===================== blur ===================== -->
+    <string name="settings_section_blur">Blur &amp; effects</string>
+    <string name="settings_blur_enabled">Blur wallpaper</string>
+    <string name="settings_blur_enabled_summary">Blur the wallpaper behind the drawer, overview and sheets</string>
+    <string name="settings_blur_targets">Blur behind</string>
+    <string name="settings_blur_target_drawer">App drawer</string>
+    <string name="settings_blur_target_overview">Page overview</string>
+    <string name="settings_blur_target_sheets">Widget &amp; folder sheets</string>
+    <string name="settings_blur_radius">Blur strength</string>
+    <string name="settings_blur_radius_summary">Softer edges cost more to draw</string>
+    <string name="settings_blur_off">Off</string>
+    <string name="settings_blur_on_value">%1$d dp</string>
+
+    <!-- ===================== drawer tabs & categories ===================== -->
+    <string name="settings_drawer_tabs">Category tabs</string>
+    <string name="settings_drawer_tabs_summary">Group apps into tabs across the top of the drawer</string>
+    <string name="settings_drawer_tabs_enabled">Show category tabs</string>
+    <string name="settings_drawer_tab_position">Tab position</string>
+    <string name="settings_drawer_tab_above_search">Above search</string>
+    <string name="settings_drawer_tab_below_search">Below search</string>
+    <string name="settings_drawer_tab_show_all">Show \"All\" tab</string>
+    <string name="settings_drawer_tab_show_hidden">Show \"Hidden\" tab</string>
+    <string name="settings_drawer_tab_search_scope">Search within the tab</string>
+    <string name="settings_drawer_tab_search_scope_summary">Off searches every app, whichever tab is open</string>
+    <string name="settings_manage_categories">Manage categories</string>
+    <string name="settings_manage_categories_summary">Create tabs and choose the apps in them</string>
+    <string name="drawer_tab_all">All</string>
+    <string name="drawer_tab_hidden">Hidden</string>
+    <string name="category_title">Categories</string>
+    <string name="category_new">New category</string>
+    <string name="category_rename">Rename category</string>
+    <string name="category_name_hint">Category name</string>
+    <string name="category_delete_confirm">Delete \"%1$s\"?</string>
+    <string name="category_delete_message">The tab goes; the apps in it stay in the drawer.</string>
+    <string name="category_apps_value">%1$d apps</string>
+    <string name="category_none">No categories yet</string>
+    <string name="category_apps_title">Apps in \"%1$s\"</string>
+    <string name="category_apps_hint">Tick the apps this tab should show</string>
+    <string name="action_rename">Rename</string>
+    <string name="action_delete">Delete</string>
+
+    <!-- ===================== hub summaries ===================== -->
+    <string name="settings_folders_count_value">%1$d folders</string>
+    <string name="settings_categories_count_value">%1$d categories</string>
+    <string name="settings_disabled_value">Off</string>
+    <string name="settings_enabled_value">On</string>
+    <string name="settings_blur_hub_summary">Blur: %1$s</string>
 </resources>

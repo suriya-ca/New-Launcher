@@ -1,6 +1,8 @@
 package com.sdev.newlauncher.data
 
 import android.content.Context
+import org.json.JSONArray
+import org.json.JSONObject
 
 /**
  * Lightweight persistence for the launcher using [android.content.SharedPreferences].
@@ -85,12 +87,13 @@ class LauncherPrefs(context: Context) {
         prefs.edit().putString(KEY_HOME_ITEMS, encodeHomeItems(items)).apply()
 
     fun isAppOnHome(packageName: String): Boolean =
-        getHomeItems().any { !it.isWidget && it.packageName == packageName }
+        getHomeItems().any { it.isApp && it.packageName == packageName } ||
+            getFolders().any { folder -> folder.children.any { it.substringBefore('/') == packageName } }
 
     /** Places an app in the first free cell, growing the page count when the pages are full. */
     fun addAppToHome(packageName: String, activityName: String): Boolean {
+        if (isAppOnHome(packageName)) return false
         val items = getHomeItems()
-        if (items.any { !it.isWidget && it.packageName == packageName }) return false
         val slot = HomeGeometry.firstFreeSlot(
             items,
             getHomeColumns(),
@@ -113,8 +116,24 @@ class LauncherPrefs(context: Context) {
 
     fun removeAppFromHome(packageName: String) {
         val items = getHomeItems()
-        val kept = items.filterNot { !it.isWidget && it.packageName == packageName }
+        val kept = items.filterNot { it.isApp && it.packageName == packageName }
         if (kept.size != items.size) setHomeItems(kept)
+        // Being taken off the home screen means out of a folder too, not out of the app's cell only.
+        removePackageFromAllFolders(packageName)
+    }
+
+    /** Drops a folder placement whose folder record has gone, and a record whose cell has gone. */
+    fun pruneFolders() {
+        val items = getHomeItems()
+        val folders = getFolders()
+        if (folders.isEmpty() && items.none { it.isFolder }) return
+
+        val keptFolders = folders.filter { folder -> items.any { it.isFolder && it.folderId == folder.id } }
+        if (keptFolders.size != folders.size) setFolders(keptFolders)
+
+        val recordIds = keptFolders.map { it.id }.toSet()
+        val keptItems = items.filterNot { it.isFolder && it.folderId !in recordIds }
+        if (keptItems.size != items.size) setHomeItems(keptItems)
     }
 
     /** Removes a single placement, identified by [HomeItem.id]. */
@@ -145,8 +164,19 @@ class LauncherPrefs(context: Context) {
     /** Drops home items and dock entries whose package is no longer installed. */
     fun removeMissing(installedPackages: Set<String>) {
         val items = getHomeItems()
-        val kept = items.filter { it.packageName in installedPackages }
+        // A folder is not tied to a package of its own: it stays, and only the apps inside it
+        // that have gone are dropped below.
+        val kept = items.filter { it.isFolder || it.packageName in installedPackages }
         if (kept.size != items.size) setHomeItems(kept)
+
+        val folders = getFolders()
+        if (folders.isNotEmpty()) {
+            val pruned = folders.map { folder ->
+                val children = folder.children.filter { it.substringBefore('/') in installedPackages }
+                if (children == folder.children) folder else folder.copy(children = children)
+            }
+            if (pruned != folders) setFolders(pruned)
+        }
 
         val dock = getDockApps()
         val newDock = dock.filter { it in installedPackages }
@@ -283,6 +313,454 @@ class LauncherPrefs(context: Context) {
         return ordered
     }
 
+    // ---------------------------------------------------------------- icon shape & icon packs
+
+    fun getIconShape(): IconShape =
+        IconShape.fromStored(prefs.getInt(KEY_ICON_SHAPE, IconShape.NONE.ordinal))
+
+    fun setIconShape(shape: IconShape) =
+        prefs.edit().putInt(KEY_ICON_SHAPE, IconShape.toStored(shape)).apply()
+
+    /** How much of the cell an app icon fills, as a percentage (80–120). */
+    fun getIconShapeScalePercent(): Int =
+        prefs.getInt(KEY_ICON_SHAPE_SCALE, DEFAULT_ICON_SHAPE_SCALE).coerceIn(80, 120)
+
+    fun setIconShapeScalePercent(percent: Int) =
+        prefs.edit().putInt(KEY_ICON_SHAPE_SCALE, percent.coerceIn(80, 120)).apply()
+
+    /** The corner radius of the [IconShape.ROUNDED] shape, as a percentage of the icon's side. */
+    fun getIconShapeCornerPercent(): Int =
+        prefs.getInt(KEY_ICON_SHAPE_CORNER, DEFAULT_ICON_SHAPE_CORNER).coerceIn(8, 50)
+
+    fun setIconShapeCornerPercent(percent: Int) =
+        prefs.edit().putInt(KEY_ICON_SHAPE_CORNER, percent.coerceIn(8, 50)).apply()
+
+    /** Whether the chosen shape is applied to icons on [scope]. */
+    fun isShapeAppliedTo(scope: IconScope): Boolean =
+        prefs.getBoolean(scopeKey(KEY_ICON_SHAPE_SCOPE, scope), true)
+
+    fun setShapeAppliedTo(scope: IconScope, enabled: Boolean) =
+        prefs.edit().putBoolean(scopeKey(KEY_ICON_SHAPE_SCOPE, scope), enabled).apply()
+
+    /** The package name of the icon pack in use, or `""` for the system icons. */
+    fun getIconPack(): String = prefs.getString(KEY_ICON_PACK, "") ?: ""
+
+    fun setIconPack(packageName: String) =
+        prefs.edit().putString(KEY_ICON_PACK, packageName).apply()
+
+    /** Whether the chosen icon pack is applied to icons on [scope]. */
+    fun isPackAppliedTo(scope: IconScope): Boolean =
+        prefs.getBoolean(scopeKey(KEY_ICON_PACK_SCOPE, scope), true)
+
+    fun setPackAppliedTo(scope: IconScope, enabled: Boolean) =
+        prefs.edit().putBoolean(scopeKey(KEY_ICON_PACK_SCOPE, scope), enabled).apply()
+
+    private fun scopeKey(prefix: String, scope: IconScope): String = "${prefix}_${scope.name.lowercase()}"
+
+    // ---------------------------------------------------------------- gestures
+
+    fun isSwipeDownEnabled(): Boolean = prefs.getBoolean(KEY_SWIPE_DOWN_ENABLED, true)
+
+    fun setSwipeDownEnabled(enabled: Boolean) =
+        prefs.edit().putBoolean(KEY_SWIPE_DOWN_ENABLED, enabled).apply()
+
+    fun getSwipeDownAction(): SwipeDownAction =
+        SwipeDownAction.fromStored(prefs.getInt(KEY_SWIPE_DOWN_ACTION, 0))
+
+    fun setSwipeDownAction(action: SwipeDownAction) =
+        prefs.edit().putInt(KEY_SWIPE_DOWN_ACTION, SwipeDownAction.toStored(action)).apply()
+
+    /** When true, the gesture only fires from empty home space, never over an icon or widget. */
+    fun isSwipeDownEmptySpaceOnly(): Boolean = prefs.getBoolean(KEY_SWIPE_DOWN_EMPTY_ONLY, true)
+
+    fun setSwipeDownEmptySpaceOnly(enabled: Boolean) =
+        prefs.edit().putBoolean(KEY_SWIPE_DOWN_EMPTY_ONLY, enabled).apply()
+
+    fun isHapticsEnabled(): Boolean = prefs.getBoolean(KEY_HAPTICS, false)
+
+    fun setHapticsEnabled(enabled: Boolean) =
+        prefs.edit().putBoolean(KEY_HAPTICS, enabled).apply()
+
+    // ---------------------------------------------------------------- blur
+
+    fun isBlurEnabled(): Boolean = prefs.getBoolean(KEY_BLUR_ENABLED, false)
+
+    fun setBlurEnabled(enabled: Boolean) = prefs.edit().putBoolean(KEY_BLUR_ENABLED, enabled).apply()
+
+    fun isBlurTargetEnabled(target: BlurTarget): Boolean =
+        prefs.getBoolean("${KEY_BLUR_TARGET}_${target.name.lowercase()}", true)
+
+    fun setBlurTargetEnabled(target: BlurTarget, enabled: Boolean) =
+        prefs.edit().putBoolean("${KEY_BLUR_TARGET}_${target.name.lowercase()}", enabled).apply()
+
+    /** Blur strength in dp (4–32). */
+    fun getBlurRadiusDp(): Int = prefs.getInt(KEY_BLUR_RADIUS, 12).coerceIn(4, 32)
+
+    fun setBlurRadiusDp(radiusDp: Int) =
+        prefs.edit().putInt(KEY_BLUR_RADIUS, radiusDp.coerceIn(4, 32)).apply()
+
+    // ---------------------------------------------------------------- folders
+
+    fun areFoldersEnabled(): Boolean = prefs.getBoolean(KEY_FOLDERS_ENABLED, true)
+
+    fun setFoldersEnabled(enabled: Boolean) =
+        prefs.edit().putBoolean(KEY_FOLDERS_ENABLED, enabled).apply()
+
+    fun getFolderPreview(): FolderPreview =
+        FolderPreview.fromStored(prefs.getInt(KEY_FOLDER_PREVIEW, 0))
+
+    fun setFolderPreview(preview: FolderPreview) =
+        prefs.edit().putInt(KEY_FOLDER_PREVIEW, FolderPreview.toStored(preview)).apply()
+
+    fun getFolderBackground(): FolderBackground =
+        FolderBackground.fromStored(prefs.getInt(KEY_FOLDER_BACKGROUND, 0))
+
+    fun setFolderBackground(background: FolderBackground) =
+        prefs.edit().putInt(KEY_FOLDER_BACKGROUND, FolderBackground.toStored(background)).apply()
+
+    fun getFolderOpenStyle(): FolderOpenStyle =
+        FolderOpenStyle.fromStored(prefs.getInt(KEY_FOLDER_OPEN_STYLE, 0))
+
+    fun setFolderOpenStyle(style: FolderOpenStyle) =
+        prefs.edit().putInt(KEY_FOLDER_OPEN_STYLE, FolderOpenStyle.toStored(style)).apply()
+
+    /** Columns used by the grid inside an open folder. */
+    fun getFolderGridColumns(): Int = prefs.getInt(KEY_FOLDER_COLUMNS, 4).coerceIn(2, 6)
+
+    fun setFolderGridColumns(columns: Int) =
+        prefs.edit().putInt(KEY_FOLDER_COLUMNS, columns.coerceIn(2, 6)).apply()
+
+    /** How many apps one folder may hold. */
+    fun getFolderMaxApps(): Int = prefs.getInt(KEY_FOLDER_MAX_APPS, 12).coerceIn(4, 36)
+
+    fun setFolderMaxApps(count: Int) =
+        prefs.edit().putInt(KEY_FOLDER_MAX_APPS, count.coerceIn(4, 36)).apply()
+
+    /** Whether a folder's name is drawn under its cell, as for app labels. */
+    fun showFolderLabels(): Boolean = prefs.getBoolean(KEY_FOLDER_LABELS, true)
+
+    fun setShowFolderLabels(show: Boolean) =
+        prefs.edit().putBoolean(KEY_FOLDER_LABELS, show).apply()
+
+    /** Whether deleting a folder puts its apps back on the home screen or removes them too. */
+    fun isUnfoldOnDelete(): Boolean = prefs.getBoolean(KEY_FOLDER_UNFOLD, true)
+
+    fun setUnfoldOnDelete(enabled: Boolean) =
+        prefs.edit().putBoolean(KEY_FOLDER_UNFOLD, enabled).apply()
+
+    fun getFolders(): List<LauncherFolder> {
+        val raw = prefs.getString(KEY_HOME_FOLDERS, null) ?: return emptyList()
+        return try {
+            val array = JSONArray(raw)
+            (0 until array.length()).mapNotNull { index ->
+                val obj = array.optJSONObject(index) ?: return@mapNotNull null
+                val id = obj.optString("id").takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+                val name = obj.optString("name")
+                val children = obj.optJSONArray("children")?.let { kids ->
+                    (0 until kids.length()).mapNotNull { kids.optString(it).takeIf { s -> s.isNotEmpty() } }
+                }.orEmpty()
+                LauncherFolder(id, name, children)
+            }
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    fun setFolders(folders: List<LauncherFolder>) {
+        val array = JSONArray()
+        for (folder in folders) {
+            val obj = JSONObject()
+            obj.put("id", folder.id)
+            obj.put("name", folder.name)
+            obj.put("children", JSONArray(folder.children))
+            array.put(obj)
+        }
+        prefs.edit().putString(KEY_HOME_FOLDERS, array.toString()).apply()
+    }
+
+    /** All drawer (app-list) folders. */
+    fun getDrawerFolders(): List<DrawerFolder> {
+        val raw = prefs.getString(KEY_DRAWER_FOLDERS, null) ?: return emptyList()
+        return try {
+            val array = JSONArray(raw)
+            (0 until array.length()).mapNotNull { index ->
+                val obj = array.optJSONObject(index) ?: return@mapNotNull null
+                val id = obj.optString("id").takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+                val name = obj.optString("name")
+                val children = obj.optJSONArray("children")?.let { kids ->
+                    (0 until kids.length()).mapNotNull { kids.optString(it).takeIf { s -> s.isNotEmpty() } }
+                }.orEmpty()
+                DrawerFolder(id, name, children)
+            }
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    fun setDrawerFolders(folders: List<DrawerFolder>) {
+        val array = JSONArray()
+        for (folder in folders) {
+            val obj = JSONObject()
+            obj.put("id", folder.id)
+            obj.put("name", folder.name)
+            obj.put("children", JSONArray(folder.children))
+            array.put(obj)
+        }
+        prefs.edit().putString(KEY_DRAWER_FOLDERS, array.toString()).apply()
+    }
+
+    fun drawerFolderById(id: String): DrawerFolder? = getDrawerFolders().firstOrNull { it.id == id }
+
+    fun upsertDrawerFolder(folder: DrawerFolder) {
+        val folders = getDrawerFolders().toMutableList()
+        val index = folders.indexOfFirst { it.id == folder.id }
+        if (index >= 0) folders[index] = folder else folders.add(folder)
+        setDrawerFolders(folders)
+    }
+
+    fun renameDrawerFolder(id: String, name: String) {
+        val folders = getDrawerFolders().toMutableList()
+        val index = folders.indexOfFirst { it.id == id }
+        if (index < 0) return
+        folders[index] = folders[index].copy(name = name)
+        setDrawerFolders(folders)
+    }
+
+    fun removeDrawerFolderRecord(id: String) {
+        val folders = getDrawerFolders()
+        val kept = folders.filterNot { it.id == id }
+        if (kept.size != folders.size) setDrawerFolders(kept)
+    }
+
+    fun newDrawerFolderId(): String {
+        val used = getDrawerFolders().map { it.id }.toSet()
+        var n = 1
+        while ("d$n" in used) n++
+        return "d$n"
+    }
+
+    fun addAppToDrawerFolder(folderId: String, appKey: String): Boolean {
+        val folders = getDrawerFolders().toMutableList()
+        val index = folders.indexOfFirst { it.id == folderId }
+        if (index < 0) return false
+        val folder = folders[index]
+        if (appKey in folder.children) return false
+        if (folder.children.size >= getFolderMaxApps()) return false
+        folders[index] = folder.copy(children = folder.children + appKey)
+        setDrawerFolders(folders)
+        return true
+    }
+
+    fun removeAppFromDrawerFolder(folderId: String, appKey: String) {
+        val folders = getDrawerFolders().toMutableList()
+        val index = folders.indexOfFirst { it.id == folderId }
+        if (index < 0) return
+        val folder = folders[index]
+        if (appKey !in folder.children) return
+        folders[index] = folder.copy(children = folder.children - appKey)
+        setDrawerFolders(folders)
+    }
+
+    fun removeAppFromAllDrawerFolders(appKey: String) {
+        val folders = getDrawerFolders()
+        if (folders.none { appKey in it.children }) return
+        setDrawerFolders(folders.map { if (appKey in it.children) it.copy(children = it.children - appKey) else it })
+    }
+
+    /** Takes every child of [packageName] out of every drawer folder. */
+    fun removePackagesFromDrawerFolders(packageName: String) {
+        val prefix = packageName + "/"
+        setDrawerFolders(getDrawerFolders().map {
+            it.copy(children = it.children.filterNot { k -> k.startsWith(prefix) })
+        })
+    }
+
+    /** Forggets any empty drawer folder, pruning its record. */
+    fun getDrawerFolderCount(): Int = getDrawerFolders().size
+
+    /** Adds or replaces [folder], keyed on its id. */
+    fun upsertFolder(folder: LauncherFolder) {
+        val folders = getFolders().toMutableList()
+        val index = folders.indexOfFirst { it.id == folder.id }
+        if (index >= 0) folders[index] = folder else folders.add(folder)
+        setFolders(folders)
+    }
+
+    fun renameFolder(id: String, name: String) {
+        val folders = getFolders().toMutableList()
+        val index = folders.indexOfFirst { it.id == id }
+        if (index < 0) return
+        folders[index] = folders[index].copy(name = name)
+        setFolders(folders)
+    }
+
+    /** Forgets a folder record; the placements that point at it are removed by the caller. */
+    fun removeFolderRecord(id: String) {
+        val folders = getFolders()
+        val kept = folders.filterNot { it.id == id }
+        if (kept.size != folders.size) setFolders(kept)
+    }
+
+    /** A folder id that is not in use yet. */
+    fun newFolderId(): String {
+        val used = getFolders().map { it.id }.toSet()
+        var n = 1
+        while ("f$n" in used) n++
+        return "f$n"
+    }
+
+    /** Files [appKey] into folder [folderId]; refuses when the folder is full. */
+    fun addAppToFolder(folderId: String, appKey: String): Boolean {
+        val folders = getFolders().toMutableList()
+        val index = folders.indexOfFirst { it.id == folderId }
+        if (index < 0) return false
+        val folder = folders[index]
+        if (appKey in folder.children) return false
+        if (folder.children.size >= getFolderMaxApps()) return false
+        folders[index] = folder.copy(children = folder.children + appKey)
+        setFolders(folders)
+        return true
+    }
+
+    fun removeAppFromFolder(folderId: String, appKey: String) {
+        val folders = getFolders().toMutableList()
+        val index = folders.indexOfFirst { it.id == folderId }
+        if (index < 0) return
+        val folder = folders[index]
+        if (appKey !in folder.children) return
+        folders[index] = folder.copy(children = folder.children - appKey)
+        setFolders(folders)
+    }
+
+    /** Takes [appKey] out of every folder (used when an app is hidden or uninstalled). */
+    fun removeAppFromAllFolders(appKey: String) {
+        val folders = getFolders()
+        if (folders.none { appKey in it.children }) return
+        setFolders(folders.map { if (appKey in it.children) it.copy(children = it.children - appKey) else it })
+    }
+
+    /** Takes every child of [packageName] out of every folder. */
+    fun removePackageFromAllFolders(packageName: String) {
+        val folders = getFolders()
+        val pruned = folders.map { folder ->
+            val children = folder.children.filterNot { it.substringBefore('/') == packageName }
+            if (children == folder.children) folder else folder.copy(children = children)
+        }
+        if (pruned != folders) setFolders(pruned)
+    }
+
+    fun folderContaining(appKey: String): LauncherFolder? =
+        getFolders().firstOrNull { appKey in it.children }
+
+    // ---------------------------------------------------------------- drawer categories & tabs
+
+    fun areDrawerTabsEnabled(): Boolean = prefs.getBoolean(KEY_DRAWER_TABS_ENABLED, false)
+
+    fun setDrawerTabsEnabled(enabled: Boolean) =
+        prefs.edit().putBoolean(KEY_DRAWER_TABS_ENABLED, enabled).apply()
+
+    fun showAllDrawerTab(): Boolean = prefs.getBoolean(KEY_DRAWER_TAB_ALL, true)
+
+    fun setShowAllDrawerTab(show: Boolean) =
+        prefs.edit().putBoolean(KEY_DRAWER_TAB_ALL, show).apply()
+
+    fun showHiddenDrawerTab(): Boolean = prefs.getBoolean(KEY_DRAWER_TAB_HIDDEN, false)
+
+    fun setShowHiddenDrawerTab(show: Boolean) =
+        prefs.edit().putBoolean(KEY_DRAWER_TAB_HIDDEN, show).apply()
+
+    fun getDrawerTabPosition(): DrawerTabPosition =
+        DrawerTabPosition.fromStored(prefs.getInt(KEY_DRAWER_TAB_POSITION, 0))
+
+    fun setDrawerTabPosition(position: DrawerTabPosition) =
+        prefs.edit().putInt(KEY_DRAWER_TAB_POSITION, DrawerTabPosition.toStored(position)).apply()
+
+    /** Whether a search inside a category stays in that category or covers every app. */
+    fun isDrawerTabSearchScoped(): Boolean = prefs.getBoolean(KEY_DRAWER_TAB_SEARCH_SCOPE, true)
+
+    fun setDrawerTabSearchScoped(withinTab: Boolean) =
+        prefs.edit().putBoolean(KEY_DRAWER_TAB_SEARCH_SCOPE, withinTab).apply()
+
+    fun getDrawerCategories(): List<DrawerCategory> {
+        val raw = prefs.getString(KEY_DRAWER_CATEGORIES, null) ?: return emptyList()
+        return try {
+            val array = JSONArray(raw)
+            (0 until array.length()).mapNotNull { index ->
+                val obj = array.optJSONObject(index) ?: return@mapNotNull null
+                val id = obj.optString("id").takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+                val name = obj.optString("name")
+                val packages = obj.optJSONArray("packages")?.let { list ->
+                    (0 until list.length()).mapNotNull { list.optString(it).takeIf { s -> s.isNotEmpty() } }
+                }.orEmpty()
+                DrawerCategory(id, name, packages)
+            }
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    fun setDrawerCategories(categories: List<DrawerCategory>) {
+        val array = JSONArray()
+        for (category in categories) {
+            val obj = JSONObject()
+            obj.put("id", category.id)
+            obj.put("name", category.name)
+            obj.put("packages", JSONArray(category.packages))
+            array.put(obj)
+        }
+        prefs.edit().putString(KEY_DRAWER_CATEGORIES, array.toString()).apply()
+    }
+
+    fun upsertDrawerCategory(category: DrawerCategory) {
+        val categories = getDrawerCategories().toMutableList()
+        val index = categories.indexOfFirst { it.id == category.id }
+        if (index >= 0) categories[index] = category else categories.add(category)
+        setDrawerCategories(categories)
+    }
+
+    fun deleteDrawerCategory(id: String) {
+        val categories = getDrawerCategories()
+        val kept = categories.filterNot { it.id == id }
+        if (kept.size != categories.size) setDrawerCategories(kept)
+    }
+
+    fun newDrawerCategoryId(): String {
+        val used = getDrawerCategories().map { it.id }.toSet()
+        var n = 1
+        while ("c$n" in used) n++
+        return "c$n"
+    }
+
+    /** Files [packageName] into category [id]. An app can belong to several categories. */
+    fun assignAppToCategory(id: String, packageName: String) {
+        val categories = getDrawerCategories().toMutableList()
+        val index = categories.indexOfFirst { it.id == id }
+        if (index < 0) return
+        val category = categories[index]
+        if (packageName in category.packages) return
+        categories[index] = category.copy(packages = category.packages + packageName)
+        setDrawerCategories(categories)
+    }
+
+    fun unassignAppFromCategory(id: String, packageName: String) {
+        val categories = getDrawerCategories().toMutableList()
+        val index = categories.indexOfFirst { it.id == id }
+        if (index < 0) return
+        val category = categories[index]
+        if (packageName !in category.packages) return
+        categories[index] = category.copy(packages = category.packages - packageName)
+        setDrawerCategories(categories)
+    }
+
+    /** Drops [packageName] from every category (used when an app is uninstalled). */
+    fun removePackageFromAllCategories(packageName: String) {
+        val categories = getDrawerCategories()
+        if (categories.none { packageName in it.packages }) return
+        setDrawerCategories(
+            categories.map { if (packageName in it.packages) it.copy(packages = it.packages - packageName) else it }
+        )
+    }
+
     // ---------------------------------------------------------------- internal
 
     /**
@@ -319,13 +797,16 @@ class LauncherPrefs(context: Context) {
 
     private fun encodeHomeItems(items: List<HomeItem>): String =
         items.joinToString(SEPARATOR) { item ->
-            if (item.isWidget) {
-                listOf(
+            when {
+                item.isWidget -> listOf(
                     WIDGET_TAG, item.appWidgetId, item.packageName,
                     item.page, item.row, item.col, item.rowSpan, item.colSpan
                 )
-            } else {
-                listOf(
+                item.isFolder -> listOf(
+                    FOLDER_TAG, item.folderId, "",
+                    item.page, item.row, item.col, item.rowSpan, item.colSpan
+                )
+                else -> listOf(
                     APP_TAG, item.packageName, item.activityName,
                     item.page, item.row, item.col, item.rowSpan, item.colSpan
                 )
@@ -346,6 +827,11 @@ class LauncherPrefs(context: Context) {
                 WIDGET_TAG -> HomeItem(
                     packageName = fields[2],
                     appWidgetId = fields[1].toIntOrNull() ?: return@mapNotNull null,
+                    page = page, row = row, col = col, rowSpan = rowSpan, colSpan = colSpan
+                )
+                FOLDER_TAG -> HomeItem(
+                    packageName = "",
+                    folderId = fields[1],
                     page = page, row = row, col = col, rowSpan = rowSpan, colSpan = colSpan
                 )
                 APP_TAG -> HomeItem(
@@ -388,6 +874,35 @@ class LauncherPrefs(context: Context) {
         private const val KEY_HOME_PAGES = "home_pages"
         private const val KEY_HOME_ITEMS = "home_items"
         private const val KEY_HOME_SPANS_REFIT = "home_spans_refit"
+        private const val KEY_ICON_SHAPE = "icon_shape"
+        private const val KEY_ICON_SHAPE_SCALE = "icon_shape_scale"
+        private const val KEY_ICON_SHAPE_CORNER = "icon_shape_corner"
+        private const val KEY_ICON_SHAPE_SCOPE = "icon_shape_scope"
+        private const val KEY_ICON_PACK = "icon_pack_pkg"
+        private const val KEY_ICON_PACK_SCOPE = "icon_pack_scope"
+        private const val KEY_SWIPE_DOWN_ENABLED = "swipe_down_enabled"
+        private const val KEY_SWIPE_DOWN_ACTION = "swipe_down_action"
+        private const val KEY_SWIPE_DOWN_EMPTY_ONLY = "swipe_down_empty_only"
+        private const val KEY_HAPTICS = "haptics_enabled"
+        private const val KEY_BLUR_ENABLED = "blur_enabled"
+        private const val KEY_BLUR_TARGET = "blur_target"
+        private const val KEY_BLUR_RADIUS = "blur_radius_dp"
+        private const val KEY_FOLDERS_ENABLED = "folders_enabled"
+        private const val KEY_FOLDER_PREVIEW = "folder_preview"
+        private const val KEY_FOLDER_BACKGROUND = "folder_background"
+        private const val KEY_FOLDER_OPEN_STYLE = "folder_open_style"
+        private const val KEY_FOLDER_COLUMNS = "folder_grid_columns"
+        private const val KEY_FOLDER_MAX_APPS = "folder_max_apps"
+        private const val KEY_FOLDER_LABELS = "folder_show_labels"
+        private const val KEY_FOLDER_UNFOLD = "folder_unfold_on_delete"
+        private const val KEY_HOME_FOLDERS = "home_folders"
+    private const val KEY_DRAWER_FOLDERS = "drawer_folders"
+        private const val KEY_DRAWER_TABS_ENABLED = "drawer_tabs_enabled"
+        private const val KEY_DRAWER_TAB_ALL = "drawer_tab_show_all"
+        private const val KEY_DRAWER_TAB_HIDDEN = "drawer_tab_show_hidden"
+        private const val KEY_DRAWER_TAB_POSITION = "drawer_tab_position"
+        private const val KEY_DRAWER_TAB_SEARCH_SCOPE = "drawer_tab_search_scope"
+        private const val KEY_DRAWER_CATEGORIES = "drawer_categories"
         private const val SEPARATOR = "|"
         private const val FIELD_SEPARATOR = ":"
 
@@ -395,6 +910,7 @@ class LauncherPrefs(context: Context) {
         private const val HOME_FIELD_COUNT = 8
         private const val APP_TAG = "a"
         private const val WIDGET_TAG = "w"
+        private const val FOLDER_TAG = "f"
 
         const val MIN_HOME_COLUMNS = 3
         const val MAX_HOME_COLUMNS = 6
@@ -421,5 +937,10 @@ class LauncherPrefs(context: Context) {
         const val DEFAULT_DRAWER_ROW_SPACING = 8
 
         const val DEFAULT_DRAWER_OPACITY = 0.55f
+
+        const val DEFAULT_ICON_SHAPE_SCALE = 100
+        const val DEFAULT_ICON_SHAPE_CORNER = 22
     }
+    fun folderById(id: String): LauncherFolder? = getFolders().firstOrNull { it.id == id }
+
 }

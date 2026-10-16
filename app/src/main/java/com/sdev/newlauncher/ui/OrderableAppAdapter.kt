@@ -6,6 +6,7 @@ import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
 import com.sdev.newlauncher.R
 import com.sdev.newlauncher.data.AppInfo
+import com.sdev.newlauncher.data.IconScope
 
 /**
  * Adapter for the custom-order drawer layout. Unlike [AppAdapter] it owns a mutable
@@ -34,6 +35,9 @@ class OrderableAppAdapter(
                 notifyItemRangeChanged(0, itemCount)
             }
         }
+
+    /** The surface these cells are drawn on, which decides shape and icon-pack application. */
+    var iconScope: IconScope = IconScope.HOME
 
     fun submit(apps: List<AppInfo>) {
         items.clear()
@@ -77,7 +81,8 @@ class OrderableAppAdapter(
                 0,
                 onAppClick,
                 onAppLongClick,
-                onAppDragStart
+                onAppDragStart,
+                iconScope
             )
         }
     }

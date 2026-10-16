@@ -216,6 +216,132 @@
                 </LinearLayout>
             </LinearLayout>
 
+            <!-- ===================== CATEGORY TABS ===================== -->
+            <LinearLayout style="@style/SettingsCard">
+
+                <LinearLayout style="@style/SettingsRow">
+
+                    <ImageView
+                        style="@style/SettingsRowIcon"
+                        android:src="@drawable/ic_category" />
+
+                    <LinearLayout style="@style/SettingsRowText">
+
+                        <TextView
+                            style="@style/SettingsRowTitleInline"
+                            android:text="@string/settings_drawer_tabs" />
+
+                        <TextView
+                            style="@style/SettingsRowSummary"
+                            android:text="@string/settings_drawer_tabs_summary" />
+                    </LinearLayout>
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/drawer_tabs_switch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                </LinearLayout>
+
+                <View style="@style/SettingsDivider" />
+
+                <LinearLayout
+                    android:id="@+id/manage_categories_row"
+                    style="@style/SettingsRow"
+                    android:background="?attr/selectableItemBackground"
+                    android:clickable="true"
+                    android:focusable="true">
+
+                    <ImageView
+                        style="@style/SettingsRowIcon"
+                        android:src="@drawable/ic_apps" />
+
+                    <LinearLayout style="@style/SettingsRowText">
+
+                        <TextView
+                            style="@style/SettingsRowTitleInline"
+                            android:text="@string/settings_manage_categories" />
+
+                        <TextView
+                            android:id="@+id/manage_categories_summary"
+                            style="@style/SettingsRowSummary"
+                            android:text="@string/settings_manage_categories_summary" />
+                    </LinearLayout>
+
+                    <ImageView
+                        style="@style/SettingsRowChevron"
+                        android:src="@drawable/ic_chevron_right" />
+                </LinearLayout>
+
+                <View style="@style/SettingsDivider" />
+
+                <LinearLayout style="@style/SettingsRow">
+
+                    <TextView
+                        style="@style/SettingsRowTitleWeighted"
+                        android:text="@string/settings_drawer_tab_show_all" />
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/drawer_tab_all_switch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                </LinearLayout>
+
+                <LinearLayout style="@style/SettingsRow">
+
+                    <TextView
+                        style="@style/SettingsRowTitleWeighted"
+                        android:text="@string/settings_drawer_tab_show_hidden" />
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/drawer_tab_hidden_switch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                </LinearLayout>
+
+                <LinearLayout style="@style/SettingsRow">
+
+                    <TextView
+                        style="@style/SettingsRowTitleWeighted"
+                        android:text="@string/settings_drawer_tab_search_scope" />
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/drawer_tab_search_switch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                </LinearLayout>
+
+                <View style="@style/SettingsDivider" />
+
+                <LinearLayout style="@style/SettingsRow">
+
+                    <LinearLayout style="@style/SettingsRowText">
+
+                        <TextView
+                            style="@style/SettingsRowTitleInline"
+                            android:text="@string/settings_drawer_tab_position" />
+
+                        <RadioGroup
+                            android:id="@+id/drawer_tab_position_group"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical">
+
+                            <com.google.android.material.radiobutton.MaterialRadioButton
+                                android:id="@+id/tab_position_below"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="@string/settings_drawer_tab_below_search" />
+
+                            <com.google.android.material.radiobutton.MaterialRadioButton
+                                android:id="@+id/tab_position_above"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="@string/settings_drawer_tab_above_search" />
+                        </RadioGroup>
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 </LinearLayout>

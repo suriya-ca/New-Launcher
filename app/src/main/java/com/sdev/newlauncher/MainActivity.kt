@@ -1501,11 +1501,17 @@ class MainActivity : AppCompatActivity() {
     /**
      * Gives back what a drawer drag borrowed: the list order if the app was not dropped back into
      * the drawer, the drawer's place on screen, and — for a press that never moved — the menu.
+     *
+     * The borrow is given back whenever a drawer drag was in flight, not only while the app it
+     * carried is still known: dropping on the home or into the dock clears [pendingDrawerApp]
+     * before the drag ends, and the tile that was dimmed for the whole drag would otherwise stay
+     * dim until something happened to rebind it.
      */
     private fun finishDrawerDrag() {
-        val app = pendingDrawerApp ?: return
-        val pulled = drawerPulled
+        val app = pendingDrawerApp
         val source = drawerDragSource
+        if (app == null && source == null) return
+        val pulled = drawerPulled
         pendingDrawerApp = null
         drawerDragSource = null
         drawerPulled = false
@@ -1517,7 +1523,9 @@ class MainActivity : AppCompatActivity() {
         if (!wasPeeking && drawerOpen) binding.homeContainer.visibility = View.INVISIBLE
         source?.alpha = 1f
         // A press that was never pulled off its icon asked for the app's menu, not a drag.
-        if (!pulled && source != null && source.isAttachedToWindow) showAppMenu(app, source)
+        if (!pulled && app != null && source != null && source.isAttachedToWindow) {
+            showAppMenu(app, source)
+        }
     }
 
     /** Drag events over the drawer as a whole: the list steps aside once the drag leaves it. */

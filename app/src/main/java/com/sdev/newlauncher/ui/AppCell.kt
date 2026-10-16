@@ -50,6 +50,10 @@ internal object AppCell {
         }
 
         itemView.contentDescription = app.label
+        // Binding is the one place that decides how a cell looks, so it also undoes anything a
+        // gesture left behind: a tile lifted for a drag is dimmed while it is in the air, and a
+        // recycled view would otherwise keep that dimming for the next app it shows.
+        itemView.alpha = 1f
         itemView.setOnClickListener { onClick(app) }
         itemView.setOnLongClickListener { view ->
             // The drawer lifts the icon into a drag; releasing it without moving still opens the

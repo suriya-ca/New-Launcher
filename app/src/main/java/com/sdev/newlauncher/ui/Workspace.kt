@@ -1,5 +1,8 @@
 package com.sdev.newlauncher.ui
 
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
+import android.animation.ValueAnimator
 import android.annotation.SuppressLint
 import android.content.ClipData
 import android.content.Context
@@ -14,6 +17,7 @@ import android.view.VelocityTracker
 import android.view.View
 import android.view.ViewConfiguration
 import android.view.ViewGroup
+import android.view.animation.DecelerateInterpolator
 import android.widget.OverScroller
 import androidx.core.content.ContextCompat
 import com.sdev.newlauncher.R
@@ -216,6 +220,18 @@ class Workspace @JvmOverloads constructor(
         pathEffect = DashPathEffect(floatArrayOf(dp(6).toFloat(), dp(7).toFloat()), 0f)
     }
 
+    /** Faint card drawn around the pages either side while one of them is being dragged. */
+    private val neighbourPageFill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        color = 0x14000000
+    }
+
+    private val neighbourPageFrame = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        color = 0x33FFFFFF
+        strokeWidth = resources.displayMetrics.density * 2f
+    }
+
     private val scroller = OverScroller(context)
     private var velocityTracker: VelocityTracker? = null
     private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
@@ -236,7 +252,20 @@ class Workspace @JvmOverloads constructor(
     /** In-place page reordering: the page being dragged and how far it has followed the finger. */
     private var pageDragging = false
     private var pageDragFrom = 0
+
+    /** The slot the dragged page is heading for, held fixed while the home grows back. */
+    private var pageDragTo = 0
     private var pageDragOffsetX = 0f
+
+    /** Left to travel between where the finger let go and the slot being settled into. */
+    private var pageSettleOffset = 0f
+
+    /**
+     * How big the pages are drawn while one of them is dragged: 1 at rest, then
+     * [PAGE_OVERVIEW_SCALE] so that the neighbours either side come into view.
+     */
+    private var pageOverview = 1f
+    private var pageOverviewAnimator: ValueAnimator? = null
 
     private val longPressRunnable = Runnable {
         // In edit mode an empty spot has no menu, so the same press starts a page drag instead.
@@ -279,8 +308,20 @@ class Workspace @JvmOverloads constructor(
         }
 
         for ((view, item) in entries) itemBinder?.invoke(view, item)
-        // A page reorder preview is only ever translation; the placement is what counts.
-        if (!pageDragging) for ((view, _) in entries) view.translationX = 0f
+        if (pageDragging || pageOverview < 1f) {
+            // A page preview is a transform rather than a placement, so it is re-applied to
+            // whatever has just changed instead of being thrown away.
+            applyPagePreview()
+        } else {
+            for ((view, _) in entries) {
+                view.translationX = 0f
+                view.translationY = 0f
+                view.scaleX = 1f
+                view.scaleY = 1f
+                // An item lifted for a drag is deliberately hidden; nothing else stays dim.
+                if (view !== dragSource) view.alpha = 1f
+            }
+        }
         if (selectedItemId != null && items.none { it.id == selectedItemId }) selectedItemId = null
         requestLayout()
         invalidate()
@@ -916,43 +957,133 @@ class Workspace @JvmOverloads constructor(
     /** Lifts the page under an empty-space long press so it can be dragged somewhere else. */
     private fun startPageDrag() {
         if (pageDragging || width <= 0) return
+        // A settle still running from the last drag commits its reorder as it is cancelled, so it
+        // has to be out of the way before this drag works out which page it is starting on.
+        pageOverviewAnimator?.cancel()
         pageDragging = true
         pageDragFrom = currentPage()
+        pageDragTo = pageDragFrom
         pageDragOffsetX = 0f
+        pageSettleOffset = 0f
         select(null)
+        // The page in hand has to be drawn over the page taking its place, or the two overlap in
+        // whatever order the items happened to be added in.
+        for ((view, item) in entries) if (item.page == pageDragFrom) view.bringToFront()
         // The page owns this gesture: no paging and no drawer fling while it is dragged.
         parent?.requestDisallowInterceptTouchEvent(true)
-        invalidate()
+        shrinkOverview()
+        applyPagePreview()
+    }
+
+    /**
+     * Shrinks the home for a page drag so the pages either side come into view. Only [pageOverview]
+     * is animated; every frame of it is drawn by [applyPagePreview], which is also what moves the
+     * pages around the one being dragged.
+     */
+    private fun shrinkOverview() {
+        pageOverviewAnimator?.cancel()
+        pageOverviewAnimator = ValueAnimator
+            .ofFloat(pageOverview, PAGE_OVERVIEW_SCALE)
+            .apply {
+                duration = PAGE_OVERVIEW_MS
+                interpolator = DecelerateInterpolator()
+                addUpdateListener {
+                    pageOverview = it.animatedValue as Float
+                    applyPagePreview()
+                }
+                start()
+            }
     }
 
     private fun updatePageDrag(x: Float) {
         pageDragOffsetX = x - downX
-        applyPageDragPreview()
+        applyPagePreview()
     }
 
-    /** The page a release right now would land on. */
+    /**
+     * The page a release right now would land on. A page has crossed into the next slot once the
+     * finger is more than half a shrunk page along, which is the spacing the user can see.
+     */
     private fun pageDragTarget(): Int {
         val viewWidth = width
         if (viewWidth <= 0) return pageDragFrom
-        val steps = floor(pageDragOffsetX / viewWidth + 0.5f).toInt()
+        val steps = floor(pageDragOffsetX / (viewWidth * PAGE_OVERVIEW_SCALE) + 0.5f).toInt()
         return (pageDragFrom + steps).coerceIn(0, pageCount - 1)
     }
 
-    /** Slides the pages around the lifted one so the drop position is visible before releasing. */
-    private fun applyPageDragPreview() {
+    /** The slot the pages are heading for, whether or not a finger is still deciding it. */
+    private fun pageDragSlot(): Int = if (pageDragging) pageDragTarget() else pageDragTo
+
+    /** How far a page travels to take a slot [steps] away: one shrunk page per slot crossed. */
+    private fun pageSlotOffset(steps: Int): Float = steps * width * PAGE_OVERVIEW_SCALE
+
+    /**
+     * How far a page sits from its slot while another page is dragged over it, in screen pixels.
+     * A shrunk page is one slot wide, so the pages in between step across by exactly that much and
+     * the lifted page keeps tracking the finger.
+     */
+    private fun pagePreviewOffset(page: Int): Float {
         val viewWidth = width
-        if (viewWidth <= 0) return
+        if (viewWidth <= 0) return 0f
         val from = pageDragFrom
-        val to = pageDragTarget()
+        val to = pageDragSlot()
+        return when {
+            // The lifted page follows the finger, then settles into the slot it was let go on.
+            page == from ->
+                if (pageDragging) pageDragOffsetX
+                else pageSlotOffset(to - from) + pageSettleOffset
+            from < to && page in (from + 1)..to -> -pageSlotOffset(1)
+            to < from && page in to until from -> pageSlotOffset(1)
+            else -> 0f
+        }
+    }
+
+    /** How far into the shrink the home is: 0 at full size, 1 at the dragged-page size. */
+    private val overviewProgress: Float
+        get() = ((1f - pageOverview) / (1f - PAGE_OVERVIEW_SCALE)).coerceIn(0f, 1f)
+
+    /** Opacity of the pages that are not the one in hand: they come back as the home grows back. */
+    private val pagePreviewAlpha: Float
+        get() = 1f - (1f - PAGE_OVERVIEW_ALPHA) * overviewProgress
+
+    /**
+     * Shrinks every page towards the middle of the screen and slides the pages around the lifted
+     * one, so where it will land is visible before it is let go.
+     *
+     * The items are transformed one by one rather than by scaling this view: a view is clipped to
+     * its own bounds in the space its own scale produces, and the whole point of the preview is to
+     * show what lies outside those bounds. An item is shrunk about its own middle and then moved to
+     * where that middle belongs, which is what an overall scale would do to it.
+     */
+    private fun applyPagePreview() {
+        val bounds = Rect()
+        val middleX = width / 2f
+        val middleY = height / 2f
         for ((view, item) in entries) {
-            val page = item.page
-            view.translationX = when {
-                // The lifted page follows the finger instead of jumping between slots.
-                page == from -> pageDragOffsetX
-                from < to && page in (from + 1)..to -> -viewWidth.toFloat()
-                to < from && page in to until from -> viewWidth.toFloat()
-                else -> 0f
-            }
+            itemBounds(item, bounds)
+            view.pivotX = view.width / 2f
+            view.pivotY = view.height / 2f
+            view.scaleX = pageOverview
+            view.scaleY = pageOverview
+            // Where the item's middle sits once the page has been shrunk, plus the distance its
+            // page is travelling sideways: all three are lengths in the space this view draws in.
+            view.translationX = (pageOverview - 1f) * (bounds.centerX() - scrollX - middleX) +
+                pagePreviewOffset(item.page)
+            view.translationY = (pageOverview - 1f) * (bounds.centerY() - middleY)
+            // Everything but the page in hand steps back, so the one being moved reads as lifted.
+            view.alpha = if (item.page == pageDragFrom) 1f else pagePreviewAlpha
+        }
+        invalidate()
+    }
+
+    /** Puts every item back to full size, exactly where it was laid out. */
+    private fun clearPagePreview() {
+        for ((view, _) in entries) {
+            view.translationX = 0f
+            view.translationY = 0f
+            view.scaleX = 1f
+            view.scaleY = 1f
+            view.alpha = 1f
         }
         invalidate()
     }
@@ -960,12 +1091,47 @@ class Workspace @JvmOverloads constructor(
     private fun finishPageDrag(commit: Boolean) {
         val from = pageDragFrom
         val to = pageDragTarget()
+        val reordering = commit && to != from
         pageDragging = false
+        pageDragTo = if (reordering) to else from
+        // Whatever is left between the finger and the slot the page is going to is animated away,
+        // so letting go never snaps the page.
+        pageSettleOffset = pageDragOffsetX - pageSlotOffset(pageDragTo - from)
         pageDragOffsetX = 0f
         parent?.requestDisallowInterceptTouchEvent(false)
-        for ((view, _) in entries) view.translationX = 0f
-        invalidate()
-        if (commit && to != from) onPagesReordered?.invoke(from, to)
+        settlePageDrag { if (reordering) onPagesReordered?.invoke(from, to) }
+    }
+
+    /**
+     * Grows the home back once a page drag is over and slides the lifted page into the slot it was
+     * let go on. A committed reorder is only applied when that has finished: by then the pages are
+     * already drawn where the reorder puts them, so applying it cannot be seen as a jump.
+     */
+    private fun settlePageDrag(onSettled: () -> Unit) {
+        pageOverviewAnimator?.cancel()
+        val overviewFrom = pageOverview
+        val settleFrom = pageSettleOffset
+        pageOverviewAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = PAGE_OVERVIEW_MS
+            interpolator = DecelerateInterpolator()
+            addUpdateListener {
+                val progress = it.animatedValue as Float
+                pageOverview = overviewFrom + (1f - overviewFrom) * progress
+                pageSettleOffset = settleFrom * (1f - progress)
+                applyPagePreview()
+            }
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: Animator) {
+                    pageOverview = 1f
+                    pageSettleOffset = 0f
+                    pageDragOffsetX = 0f
+                    pageDragTo = pageDragFrom
+                    clearPagePreview()
+                    onSettled()
+                }
+            })
+            start()
+        }
     }
 
     /**
@@ -984,6 +1150,27 @@ class Workspace @JvmOverloads constructor(
         canvas.drawRoundRect(left, top, right, bottom, radius, radius, frame)
     }
 
+    /**
+     * Outlines one page as a card: the page's own slot shrunk about the middle of the screen by
+     * [pageOverview], then shifted sideways by [offsetX]. The shift is applied outside the shrink
+     * because it is a distance the finger travelled: a page follows the finger as far as it moves.
+     */
+    private fun drawPageCard(canvas: Canvas, page: Int, offsetX: Float, fill: Paint, frame: Paint) {
+        val viewWidth = width
+        if (viewWidth <= 0 || page !in 0 until pageCount) return
+        val radius = dp(SELECTION_RADIUS_DP).toFloat()
+        val left = (page * viewWidth + paddingLeft).toFloat()
+        val right = (page * viewWidth + viewWidth - paddingRight).toFloat()
+        val top = paddingTop.toFloat()
+        val bottom = (height - paddingBottom).toFloat()
+        val save = canvas.save()
+        canvas.translate(offsetX, 0f)
+        canvas.scale(pageOverview, pageOverview, scrollX + width / 2f, height / 2f)
+        canvas.drawRoundRect(left, top, right, bottom, radius, radius, fill)
+        canvas.drawRoundRect(left, top, right, bottom, radius, radius, frame)
+        canvas.restoreToCount(save)
+    }
+
     override fun dispatchDraw(canvas: Canvas) {
         if (placeholderVisible) {
             placeholderDrawable?.let {
@@ -991,13 +1178,22 @@ class Workspace @JvmOverloads constructor(
                 it.draw(canvas)
             }
         }
-        if (pageDragging) {
-            // Where the page will land, then the page itself under the finger.
-            val target = pageDragTarget()
-            if (target != pageDragFrom) {
-                drawPageFrame(canvas, target, 0f, editingPageFill, editingPageFrame)
+        if (pageDragging || pageOverview < 1f) {
+            // Every page as a card: the neighbours faint, the target lit, the lifted one on top.
+            val target = pageDragSlot()
+            for (page in 0 until pageCount) {
+                if (page == pageDragFrom) continue
+                val fill = if (page == target) editingPageFill else neighbourPageFill
+                val frame = if (page == target) editingPageFrame else neighbourPageFrame
+                drawPageCard(canvas, page, pagePreviewOffset(page), fill, frame)
             }
-            drawPageFrame(canvas, pageDragFrom, pageDragOffsetX, pageFramePaint, framePaint)
+            drawPageCard(
+                canvas,
+                pageDragFrom,
+                pagePreviewOffset(pageDragFrom),
+                pageFramePaint,
+                framePaint
+            )
         } else if (editing) {
             // Editing a page is a job done inside its bounds, so show them.
             drawPageFrame(canvas, currentPage(), 0f, editingPageFill, editingPageFrame)
@@ -1077,6 +1273,14 @@ class Workspace @JvmOverloads constructor(
         const val DRAG_LABEL = "home-item"
         const val PAGE_ANIM_MS = 220
         const val FLING_VELOCITY = 900f
+
+        /**
+         * How far the home shrinks while a page is dragged, leaving a quarter of each neighbour
+         * on screen, how far the untouched pages step back, and how long both take.
+         */
+        const val PAGE_OVERVIEW_SCALE = 0.5f
+        const val PAGE_OVERVIEW_ALPHA = 0.4f
+        const val PAGE_OVERVIEW_MS = 180L
 
         /** How close to an edge a drag has to be to roll the page over, and how often it repeats. */
         const val DRAG_EDGE_DP = 48
